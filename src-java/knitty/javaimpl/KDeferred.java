@@ -952,6 +952,52 @@ public class KDeferred
         }
     }
 
+    public static boolean isDeferrable(Object x) {
+        return (x instanceof IDeferred) || (x instanceof CompletionStage);
+    }
+
+    public static KDeferred bind(Object x, IFn valFn) {
+        if (x instanceof KDeferred) {
+            KDeferred kd = (KDeferred) x;
+            if (kd.succeeded == 1) {
+                x = kd.getRaw();
+            } else {
+                return kd.bind(valFn);
+            }
+        } else if (isDeferrable(x)) {
+            return wrap(x).bind(valFn);
+        }
+        try {
+            KDeferred r = wrap(valFn.invoke(x));
+            return r;
+        } catch (Throwable e) {
+            return wrapErr(e);
+        }
+    }
+
+    public static KDeferred bind(Object x, IFn valFn, IFn errFn) {
+        if (x instanceof KDeferred) {
+            KDeferred kd = (KDeferred) x;
+            if (kd.succeeded == 1) {
+                x = kd.getRaw();
+            } else {
+                return kd.bind(valFn, errFn);
+            }
+        } else if (isDeferrable(x)) {
+            return wrap(x).bind(valFn, errFn);
+        }
+        try {
+            KDeferred r = wrap(valFn.invoke(x));
+            return r;
+        } catch (Throwable e) {
+            return wrapErr(e);
+        }
+    }
+
+    public static KDeferred bind(Object x, IFn valFn, IFn errFn, Executor ex) {
+        return wrap(x).bind(valFn, errFn, ex);
+    }
+
     public static KDeferred create() {
         return new KDeferred();
     }

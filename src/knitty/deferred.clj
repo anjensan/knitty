@@ -143,8 +143,8 @@
 
 
 (defmacro ^:private bind-inline
-  ([d val-fn] `(.bind (wrap ~d) ~val-fn))
-  ([d val-fn err-fn] `(.bind (wrap ~d) ~val-fn ~err-fn)))
+  ([d val-fn] `(KDeferred/bind ~d ~val-fn))
+  ([d val-fn err-fn] `(KDeferred/bind ~d ~val-fn ~err-fn)))
 
 (defn bind
   "Bind 1-arg callbacks fn to deferred. Returns new deferred with amended value.
