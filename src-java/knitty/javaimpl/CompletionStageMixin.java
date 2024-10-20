@@ -16,7 +16,7 @@ import clojure.lang.PersistentArrayMap;
 public interface CompletionStageMixin extends CompletionStage {
 
     void consume(Consumer x, Consumer e, Executor ex);
-    CompletionStageMixin coerce(Object x);
+    CompletionStageMixin coerce(CompletionStage x);
     CompletionStageMixin dup();
     void fireValue(Object x);
     void fireError(Object x);
@@ -234,7 +234,7 @@ public interface CompletionStageMixin extends CompletionStage {
     default CompletionStage thenCompose(Function f) {
         CompletionStageMixin d = dup();
         this.consume(
-            x -> { coerce(f.apply(x)).consume(d::fireValue, d::fireError, null); },
+            x -> { coerce((CompletionStage) f.apply(x)).consume(d::fireValue, d::fireError, null); },
             d::fireError,
             null);
         return d;
@@ -247,7 +247,7 @@ public interface CompletionStageMixin extends CompletionStage {
     default CompletionStage thenComposeAsync(Function f, Executor ex) {
         CompletionStageMixin d = dup();
         this.consume(
-            x -> { coerce(f.apply(x)).consume(d::fireValue, d::fireError, ex); },
+            x -> { coerce((CompletionStage) f.apply(x)).consume(d::fireValue, d::fireError, ex); },
             d::fireError,
             ex);
         return d;

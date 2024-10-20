@@ -105,11 +105,7 @@ public class KDeferred
                 dest.fireError(e, null);
                 return;
             }
-            if (t instanceof IDeferred) {
-                dest.chain((IDeferred) t, null);
-            } else {
-                dest.fireValue(t, null);
-            }
+            dest.chain(t, null);
         }
 
         @Override
@@ -125,11 +121,7 @@ public class KDeferred
                     dest.fireError(e1);
                     return;
                 }
-                if (t instanceof IDeferred) {
-                    dest.chain((IDeferred) t, null);
-                } else {
-                    dest.fireValue(t, null);
-                }
+                dest.chain(t, null);
             }
         }
 
@@ -163,11 +155,7 @@ public class KDeferred
                     dest.fireError(e, null);
                     return;
                 }
-                if (t instanceof IDeferred) {
-                    dest.chain(t, null);
-                } else {
-                    dest.fireValue(t, null);
-                }
+                dest.chain(t, null);
             });
         }
 
@@ -185,11 +173,7 @@ public class KDeferred
                         dest.fireError(e1, null);
                         return;
                     }
-                    if (t instanceof IDeferred) {
-                        dest.chain(t, null);
-                    } else {
-                        dest.fireValue(t, null);
-                    }
+                    dest.chain(t, null);
                 }
             });
         }
@@ -877,10 +861,6 @@ public class KDeferred
         return this.get();
     }
 
-    public void chain(Object x) {
-        this.chain(x, null);
-    }
-
     public void chain(Object x, Object token) {
         if (x instanceof IDeferred) {
             Object xx = ((IDeferred) x).successValue(TOMB);
@@ -896,6 +876,10 @@ public class KDeferred
             }
         }
         this.fireValue(x, token);
+    }
+
+    public void chain(Object x) {
+        this.chain(x, null);
     }
 
     public KDeferred bind(IFn valFn, IFn errFn, Executor executor) {
@@ -1040,24 +1024,9 @@ public class KDeferred
         }
     }
 
-    public static KDeferred wrapCompletionStage(CompletionStage s) {
-        KDeferred d = new KDeferred();
-        s.handle((x, e) -> {
-            if (e == null) {
-                d.fireValue(x, null);
-            } else {
-                d.fireError(e, null);
-            }
-            return null;
-        });
-        return d;
-    }
-
     public static KDeferred wrap(Object x) {
         if (x instanceof IDeferred) {
             return wrapDeferred((IDeferred) x);
-        } else if (x instanceof CompletionStage) {
-            return wrapCompletionStage((CompletionStage) x);
         } else {
             return wrapVal(x);
         }
@@ -1095,10 +1064,9 @@ public class KDeferred
     }
 
     public static void connect(Object from, IMutableDeferred to) {
-        if (!(from instanceof IDeferred)) {
-            to.success(from);
-        } else if (to instanceof KDeferred) {
-            ((KDeferred) to).chain(from, null);
+        if (to instanceof KDeferred) {
+            KDeferred kd = (KDeferred) to;
+            kd.chain(from, null);
         } else {
             KDeferred t = create();
             t.chain(from, null);
@@ -1107,7 +1075,6 @@ public class KDeferred
                 public void success(Object x) {
                     to.success(x);
                 }
-
                 @Override
                 public void error(Object e) {
                     to.error(e);
@@ -1126,8 +1093,20 @@ public class KDeferred
     // == support CompletionStageMixin == //
 
     @Override
-    public CompletionStageMixin coerce(Object x) {
-        return wrap(x);
+    public CompletionStageMixin coerce(CompletionStage s) {
+        if (s instanceof KDeferred) {
+            return (KDeferred) s;
+        }
+        KDeferred d = new KDeferred();
+        s.handle((x, e) -> {
+            if (e == null) {
+                d.fireValue(x, null);
+            } else {
+                d.fireError(e, null);
+            }
+            return null;
+        });
+        return d;
     }
 
     @Override
