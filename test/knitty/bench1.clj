@@ -95,10 +95,10 @@
                       `(~f
                         (reduce
                          (fn [a# ~'x]
-                           (md/chain'
+                           (kd/bind
                             a#
                             (fn [aa#]
-                              (md/chain'
+                              (kd/bind
                                ~(if (= :lazy tt) `(deref ~'x) 'x)
                                (fn [xx#] (unchecked-add aa# xx#))))))
                          ~i

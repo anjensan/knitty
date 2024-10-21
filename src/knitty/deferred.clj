@@ -134,12 +134,14 @@
   "Registers callback fns to run when deferred is realized.
    When only one callback is provided it shold be 0-arg fn.
    When both callbacks provided - they must accept 1 argument (value or error)."
-  {:inline (fn ([x on-ok on-err] `(.onRealized (wrap ~x) ~on-ok ~on-err)))
+  {:inline (fn
+             ([x on-any] `(let [f# (fn ~'on-any' [_] (~on-any))] (.listen (wrap ~x) f#)))
+             ([x on-ok on-err] `(.listen (wrap ~x) ~on-ok ~on-err)))
    :inline-arities #{3}}
   ([x on-any]
-   (let [f (fn onany [_] (on-any))] (on x f f)))
+   (let [f (fn on-any' [_] (on-any))] (.listen (wrap x) f f)))
   ([x on-ok on-err]
-   (.onRealized (wrap x) on-ok on-err)))
+   (.listen (wrap x) on-ok on-err)))
 
 
 (defmacro ^:private bind-inline
@@ -493,7 +495,7 @@
             (cond
 
               (deferred? ~xx)
-              (let [y# (KDeferred/wrapDeferred ~xx)]
+              (let [y# (wrap ~xx)]
                 (when-not (.listen0 y# loop-step# ef#)
                   (recur (try (.get y#) (catch Throwable t# (ef# t#))))))
 
@@ -501,7 +503,7 @@
               (let [y# (unwrap1 (try (let [~fx ~xx] ~@f)
                                      (catch Throwable t# (wrap-err t#))))]
                 (if (deferred? y#)
-                  (let [y# (KDeferred/wrapDeferred y#)]
+                  (let [y# (wrap y#)]
                     (when-not (.listen0 y# loop-step# ef#)
                       (recur (try (.get y#) (catch Throwable t# (ef# t#))))))
                   (recur y#)))

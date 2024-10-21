@@ -3,6 +3,7 @@ package knitty.javaimpl;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.ref.Cleaner;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CancellationException;
@@ -105,7 +106,11 @@ public class KDeferred
                 dest.fireError(e, null);
                 return;
             }
-            dest.chain(t, null);
+            if (t instanceof IDeferred) {
+                dest.chain0((IDeferred) t, null);
+            } else {
+                dest.fireValue(t, null);
+            }
         }
 
         @Override
@@ -121,7 +126,11 @@ public class KDeferred
                     dest.fireError(e1);
                     return;
                 }
-                dest.chain(t, null);
+                if (t instanceof IDeferred) {
+                    dest.chain0((IDeferred) t, null);
+                } else {
+                    dest.fireValue(t, null);
+                }
             }
         }
 
@@ -155,7 +164,11 @@ public class KDeferred
                     dest.fireError(e, null);
                     return;
                 }
-                dest.chain(t, null);
+                if (t instanceof IDeferred) {
+                    dest.chain0((IDeferred) t, null);
+                } else {
+                    dest.fireValue(t, null);
+                }
             });
         }
 
@@ -173,7 +186,11 @@ public class KDeferred
                         dest.fireError(e1, null);
                         return;
                     }
-                    dest.chain(t, null);
+                    if (t instanceof IDeferred) {
+                        dest.chain0((IDeferred) t, null);
+                    } else {
+                        dest.fireValue(t, null);
+                    }
                 }
             });
         }
@@ -861,25 +878,37 @@ public class KDeferred
         return this.get();
     }
 
+    public void chain0(IDeferred x, Object token) {
+        if (x instanceof KDeferred) {
+            KDeferred kd = (KDeferred) x;
+            kd.listen(new Chain(this, token));
+        } else {
+            ((IDeferred) x).onRealized(new ChainValue(this, token), new ChainError(this, token));
+        }
+    }
+
     public void chain(Object x, Object token) {
         if (x instanceof IDeferred) {
-            Object xx = ((IDeferred) x).successValue(TOMB);
-            if (xx == TOMB) {
-                if (x instanceof KDeferred) {
-                    ((KDeferred) x).listen(new Chain(this, token));
-                } else {
-                    ((IDeferred) x).onRealized(new ChainValue(this, token), new ChainError(this, token));
-                }
+            IDeferred xx = (IDeferred) x;
+            x = xx.successValue(TOMB);
+            if (x == TOMB) {
+                this.chain0(xx, token);
                 return;
-            } else {
-                x = xx;
             }
         }
         this.fireValue(x, token);
     }
 
     public void chain(Object x) {
-        this.chain(x, null);
+        if (x instanceof IDeferred) {
+            IDeferred xx = (IDeferred) x;
+            x = xx.successValue(TOMB);
+            if (x == TOMB) {
+                this.chain0(xx, null);
+                return;
+            }
+        }
+        this.fireValue(x, null);
     }
 
     public KDeferred bind(IFn valFn, IFn errFn, Executor executor) {
@@ -1008,24 +1037,21 @@ public class KDeferred
         return d;
     }
 
-    public static KDeferred wrapDeferred(IDeferred x) {
-        if (x instanceof KDeferred) {
-            return (KDeferred) x;
+    private static KDeferred wrapDeferred(IDeferred x) {
+        Object xx = x.successValue(TOMB);
+        if (xx == TOMB) {
+            KDeferred d = create();
+            d.chain0(x, null);
+            return d;
         } else {
-            //Objects.requireNonNull(x);
-            Object xx = x.successValue(TOMB);
-            if (xx == TOMB) {
-                KDeferred d = create();
-                d.chain(x, null);
-                return d;
-            } else {
-                return wrapVal(xx);
-            }
+            return wrapVal(xx);
         }
     }
 
     public static KDeferred wrap(Object x) {
-        if (x instanceof IDeferred) {
+        if (x instanceof KDeferred) {
+            return (KDeferred) x;
+        } if (x instanceof IDeferred) {
             return wrapDeferred((IDeferred) x);
         } else {
             return wrapVal(x);
@@ -1033,7 +1059,7 @@ public class KDeferred
     }
 
     public static KDeferred revoke(IDeferred d, IFn canceller, IFn errCallback) {
-        KDeferred dd = wrapDeferred(d);
+        KDeferred dd = wrap(d);
         if (dd.realized()) {
             return dd;
         } else {
@@ -1070,7 +1096,7 @@ public class KDeferred
         } else {
             KDeferred t = create();
             t.chain(from, null);
-            if (!t.listen0(new AListener() {
+            t.listen(new AListener() {
                 @Override
                 public void success(Object x) {
                     to.success(x);
@@ -1079,14 +1105,7 @@ public class KDeferred
                 public void error(Object e) {
                     to.error(e);
                 }
-            })) {
-                Object v = t.getRaw();
-                if (t.succeeded == 0 && v instanceof ErrBox) {
-                    to.error(((ErrBox) v).err);
-                } else {
-                    to.success(v);
-                }
-            }
+            });
         }
     }
 
@@ -1097,6 +1116,7 @@ public class KDeferred
         if (s instanceof KDeferred) {
             return (KDeferred) s;
         }
+        Objects.requireNonNull(s);
         KDeferred d = new KDeferred();
         s.handle((x, e) -> {
             if (e == null) {

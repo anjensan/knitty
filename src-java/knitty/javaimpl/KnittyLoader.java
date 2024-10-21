@@ -42,6 +42,7 @@ public class KnittyLoader extends DynamicClassLoader {
 
         try (KnittyLoader cl = new KnittyLoader()) {
             cl.loadClass("knitty.javaimpl.YarnProvider");
+            cl.loadClass("knitty.javaimpl.RevokeException");
             cl.loadClass("knitty.javaimpl.AListener");
             cl.loadClass("knitty.javaimpl.KDeferred");
             cl.loadClass("knitty.javaimpl.KAwaiter");

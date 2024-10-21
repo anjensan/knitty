@@ -294,6 +294,7 @@ public final class YankCtx {
         }
 
         d.error(RevokeException.YANK_FINISHED, token);
+        d.consumeError();
         return false;
     }
 
