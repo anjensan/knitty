@@ -30,7 +30,7 @@
    `(decl-yarn ~fnname ~ykey ~deps ~bodyf nil))
   ([fnname ykey deps [_fn [ctx dst] & body] multifn]
    `(fn
-      ~fnname
+      ~(gensym (str fnname "-"))
       ([] ~(if (and (keyword? ykey)
                     (set? deps))
              (->YarnInfo
