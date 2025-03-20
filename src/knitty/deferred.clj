@@ -3,13 +3,15 @@
 
 (ns knitty.deferred
   (:refer-clojure :exclude [future future-call run! while reduce loop])
-  (:require [clojure.core :as c]
-            [clojure.pprint :as pp]
-            [clojure.tools.logging :as log]
-            [manifold.deferred :as md])
-  (:import [java.util.concurrent Executor]
-           [knitty.javaimpl KAwaiter KDeferred]
-           [manifold.deferred IDeferred IMutableDeferred]))
+  (:require
+   [clojure.core :as c]
+   [clojure.pprint :as pp]
+   [clojure.tools.logging :as log]
+   [manifold.deferred :as md])
+  (:import
+   [java.util.concurrent Executor]
+   [knitty.javaimpl KAwaiter KDeferred]
+   [manifold.deferred IDeferred IMutableDeferred]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -136,7 +138,7 @@
   (^KDeferred [d val-fn] (KDeferred/bind d val-fn))
   (^KDeferred [d val-fn err-fn] (KDeferred/bind d val-fn err-fn)))
 
-(defn bind-ex
+(defn bind-onto
   "Similar to `bind`, but run all callbacks on specified `executor`."
   (^KDeferred [d ^Executor executor val-fn]
    (.bind (wrap d) val-fn nil executor))
@@ -148,12 +150,7 @@
   ^KDeferred [d ^Executor executor]
   (if (nil? executor)
     (wrap d)
-    (let [dd (create)]
-      (on d
-          (fn on-val [x] (.execute executor #(.fireValue dd x)))
-          (fn on-err [e] (.execute executor #(.fireError dd e))))
-      dd)))
-
+    (bind-onto d identity wrap-err)))
 
 (defn- map-subset? [a-map b-map]
   (every? (fn [[k :as e]] (= e (find b-map k))) a-map))
