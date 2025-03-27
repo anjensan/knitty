@@ -36,7 +36,7 @@
           (.setName w (str name-prefix "-" (swap! c inc)))
           w)))))
 
-(defn create-fjp
+(defn build-fork-join-pool
   [{:keys [parallelism
            factory
            factory-prefix
@@ -74,7 +74,7 @@
 
 (defonce ^:dynamic
   ^java.util.concurrent.Executor *executor*
-  (create-fjp
+  (build-fork-join-pool
    {:parallelism (.availableProcessors (Runtime/getRuntime))
     :factory-prefix "knitty-fjp"
     :exception-handler (fn [t e] (log/errorf e "uncaught exception in %s" t))
