@@ -478,6 +478,35 @@
           (is (= e @(capture-error (kd/zip* (map #(kd/future %) v))))))))
   )
 
+
+(deftest test-timeout
+
+  (is (= 1
+         @(-> (kd/wrap 1)
+              (kd/timeout 10 ::timeout))))
+
+  (is (thrown? java.util.concurrent.TimeoutException
+               @(-> (kd/create)
+                    (kd/timeout 1))))
+
+  (is (= ::timeout
+         @(-> (kd/create)
+              (kd/timeout 1 ::timeout))))
+
+  (is (realized? (kd/timeout (kd/create) -1)))
+
+  (is (thrown? java.util.concurrent.TimeoutException
+               @(kd/timeout (kd/create) -1)))
+
+  (is (= ::ok
+         @(-> (kd/future (do (Thread/sleep 1) ::ok))
+              (kd/timeout 10 ::timeout))))
+
+  (is (= ::timeout
+         @(-> (kd/future (do (Thread/sleep 10) ::ok))
+              (kd/timeout 1 ::timeout)))))
+
+
 (defn- random-wrap [x]
   (case (int (rand-int 3))
     0 x

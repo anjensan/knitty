@@ -7,12 +7,20 @@
    [clojure.core :as c]
    [clojure.pprint :as pp]
    [clojure.tools.logging :as log]
-   [manifold.deferred :as md])
+   [manifold.deferred :as md]
+   [manifold.executor :as ex])
   (:import
    [clojure.lang Agent IFn Var]
+   [java.lang.ref WeakReference]
+   [java.util.concurrent
+    Executor
+    ForkJoinPool
+    ForkJoinPool$ForkJoinWorkerThreadFactory
+    ScheduledExecutorService
+    ScheduledThreadPoolExecutor
+    TimeUnit]
    [knitty.javaimpl KAwaiter KDeferred]
-   [manifold.deferred IDeferred IMutableDeferred]
-   [java.util.concurrent Executor ForkJoinPool ForkJoinPool$ForkJoinWorkerThreadFactory TimeUnit]))
+   [manifold.deferred IDeferred IMutableDeferred]))
 
 
 (set! *warn-on-reflection* true)
@@ -64,12 +72,33 @@
      TimeUnit/SECONDS)))
 
 
-(def ^:dynamic ^java.util.concurrent.Executor *executor*
+(defonce ^:dynamic
+  ^java.util.concurrent.Executor *executor*
   (create-fjp
    {:parallelism (.availableProcessors (Runtime/getRuntime))
     :factory-prefix "knitty-fjp"
     :exception-handler (fn [t e] (log/errorf e "uncaught exception in %s" t))
     :async-mode true}))
+
+
+(defonce ^:dynamic
+  ^ScheduledExecutorService *sched-executor*
+  (let* [self (promise)
+         acnt (atom 0)]
+        (doto
+         (ScheduledThreadPoolExecutor.
+          1
+          (ex/thread-factory
+           #(str "kdeferred-schedpool-" (swap! acnt inc))
+           self
+           nil
+           true
+           (fn [group target name stack-size]
+             (let* [bs {#'*sched-executor* @self}
+                    tt (fn [] (with-bindings* bs target))]
+                   (Thread. group tt name stack-size)))))
+          (.setRemoveOnCancelPolicy true)
+          (self))))
 
 
 (knitty.javaimpl.KDeferred/setExecutorProviderFn
@@ -677,6 +706,53 @@
      (fn [_] (bind (.next it) f))
      (fn [_] (.hasNext it))
      (fn [_] nil))))
+
+;; ==
+
+(defn- time-in
+  [^double delay
+   ^IDeferred d
+   ^IFn f]
+  (let* [r (WeakReference. d)
+         ^Executor me *executor*
+         sf (.schedule
+             *sched-executor*
+             ^Runnable
+             (fn []
+               (when-some [d' (.get r)]
+                 (.execute
+                  me
+                  (fn []
+                    (when-not (.realized d)
+                      (try
+                        (f d')
+                        (catch Throwable e (error! d e))))))))
+             (long (unchecked-multiply delay 1000))
+             java.util.concurrent.TimeUnit/MICROSECONDS)]
+        (doto d
+          (on (fn [] (.cancel sf false))))))
+
+(defn sleep
+  ([time-ms]
+   (time-in time-ms (create) #(success! % nil)))
+  ([value time-ms]
+   (time-in time-ms (create) #(connect (wrap value) %))))
+
+(def timeout-exception
+  (doto (java.util.concurrent.TimeoutException. "timeout")
+    (.setStackTrace (make-array StackTraceElement 0))))
+
+(defn timeout
+  ([d ^double delay]
+   (cond
+     (or (nil? delay) (not (deferred? d)) (realized? d)) d
+     (not (pos? delay)) (do (error! d timeout-exception) d)
+     :else (time-in delay d #(error! % timeout-exception))))
+  ([d ^double delay timeout-value]
+   (cond
+     (or (nil? delay) (not (deferred? d)) (realized? d)) d
+     (not (pos? delay)) (do (success! d timeout-value) d)
+     :else (time-in delay d #(success! % timeout-value)))))
 
 ;; ==
 
