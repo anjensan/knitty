@@ -1,6 +1,5 @@
 (ns knitty.core
   (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
             [knitty.deferred :as kd]
             [knitty.impl :as impl]
             [knitty.trace :as trace]))
@@ -11,18 +10,6 @@
 
 (def ^:dynamic *tracing*
   false)
-
-(def ^:dynamic ^java.util.concurrent.Executor *executor*
-  (impl/create-fjp
-   {:parallelism (.availableProcessors (Runtime/getRuntime))
-    :factory-prefix "knitty-fjp"
-    :exception-handler (fn [t e] (log/errorf e "uncaught exception in %s" t))
-    :async-mode true}))
-
-
-(knitty.javaimpl.KDeferred/setExecutorProviderFn
- (fn get-executor [] *executor*))
-
 
 (defn enable-tracing!
   "Globally enable knitty tracing."
@@ -37,7 +24,7 @@
   ([executor]
    (set-executor! executor true))
   ([executor shutdown-current]
-   (alter-var-root #'*executor*
+   (alter-var-root #'kd/*executor*
                    (fn [e]
                      (when (and shutdown-current
                                 (instance? java.util.concurrent.ExecutorService e))
@@ -306,7 +293,7 @@
    (yank* inputs yarns nil))
   ([inputs yarns opts]
    (let [registry (pick-opt opts :registry *registry*)
-         executor (pick-opt opts :executor *executor*)
+         executor (pick-opt opts :executor kd/*executor*)
          preload  (pick-opt opts :preload false)
          bindings (pick-opt opts :bindings true)
          tracing  (trace/if-tracing (pick-opt opts :tracing *tracing*))
@@ -379,3 +366,4 @@
   "Returns true when exception is rethrown by `yank`."
   [ex]
   (:knitty/yank-error? (ex-data ex) false))
+

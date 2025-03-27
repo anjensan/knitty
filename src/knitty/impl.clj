@@ -6,7 +6,6 @@
             [manifold.utils])
   (:import [clojure.lang AFn]
            [java.util Arrays]
-           [java.util.concurrent ForkJoinPool ForkJoinPool$ForkJoinWorkerThreadFactory TimeUnit]
            [knitty.javaimpl
             KDeferred
             KwMapper
@@ -441,49 +440,3 @@
 
 (defn gen-yarn-input [ykey]
   `(fail-always-yarn ~ykey ~(str "input-only yarn " ykey)))
-
-
-(defn enumerate-fjp-factory [name-prefix]
-  (let [c (atom 0)
-        f ForkJoinPool/defaultForkJoinWorkerThreadFactory]
-    (reify ForkJoinPool$ForkJoinWorkerThreadFactory
-      (newThread [_ pool]
-        (let [w (.newThread f pool)]
-          (.setName w (str name-prefix "-" (swap! c inc)))
-          w)))))
-
-
-(defn create-fjp
-  [{:keys [parallelism
-           factory
-           factory-prefix
-           exception-handler
-           max-size
-           min-size
-           saturate
-           keep-alive-seconds
-           min-runnable
-           async-mode]}]
-  {:pre [(or (not factory) (factory-prefix))]}
-  (let [parallelism (or parallelism (.availableProcessors (Runtime/getRuntime)))
-        factory (or factory (enumerate-fjp-factory (or factory-prefix "knitty-fjp")))
-        saturate
-        (when saturate
-          (reify java.util.function.Predicate
-            (test [_ pool]
-              (boolean (saturate pool)))))
-        exception-handler
-        (when exception-handler
-          (reify java.lang.Thread$UncaughtExceptionHandler
-            (uncaughtException [_ thread exception] (exception-handler thread exception))))]
-    (ForkJoinPool.
-     parallelism
-     factory
-     exception-handler
-     (boolean async-mode)
-     (int (or min-size 0))
-     (int (or max-size 32768))
-     (int (or min-runnable 1))
-     saturate
-     (or keep-alive-seconds 60)
-     TimeUnit/SECONDS)))

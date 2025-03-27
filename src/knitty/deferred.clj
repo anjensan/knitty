@@ -10,12 +10,70 @@
    [manifold.deferred :as md])
   (:import
    [clojure.lang Agent IFn Var]
-   [java.util.concurrent Executor]
    [knitty.javaimpl KAwaiter KDeferred]
-   [manifold.deferred IDeferred IMutableDeferred]))
+   [manifold.deferred IDeferred IMutableDeferred]
+   [java.util.concurrent Executor ForkJoinPool ForkJoinPool$ForkJoinWorkerThreadFactory TimeUnit]))
+
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
+
+
+(defn- enumerate-fjp-factory [name-prefix]
+  (let [c (atom 0)
+        f ForkJoinPool/defaultForkJoinWorkerThreadFactory]
+    (reify ForkJoinPool$ForkJoinWorkerThreadFactory
+      (newThread [_ pool]
+        (let [w (.newThread f pool)]
+          (.setName w (str name-prefix "-" (swap! c inc)))
+          w)))))
+
+(defn create-fjp
+  [{:keys [parallelism
+           factory
+           factory-prefix
+           exception-handler
+           max-size
+           min-size
+           saturate
+           keep-alive-seconds
+           min-runnable
+           async-mode]}]
+  {:pre [(or (not factory) (factory-prefix))]}
+  (let [parallelism (or parallelism (.availableProcessors (Runtime/getRuntime)))
+        factory (or factory (enumerate-fjp-factory (or factory-prefix "knitty-fjp")))
+        saturate
+        (when saturate
+          (reify java.util.function.Predicate
+            (test [_ pool]
+              (boolean (saturate pool)))))
+        exception-handler
+        (when exception-handler
+          (reify java.lang.Thread$UncaughtExceptionHandler
+            (uncaughtException [_ thread exception] (exception-handler thread exception))))]
+    (ForkJoinPool.
+     parallelism
+     factory
+     exception-handler
+     (boolean async-mode)
+     (int (or min-size 0))
+     (int (or max-size 32768))
+     (int (or min-runnable 1))
+     saturate
+     (or keep-alive-seconds 60)
+     TimeUnit/SECONDS)))
+
+
+(def ^:dynamic ^java.util.concurrent.Executor *executor*
+  (create-fjp
+   {:parallelism (.availableProcessors (Runtime/getRuntime))
+    :factory-prefix "knitty-fjp"
+    :exception-handler (fn [t e] (log/errorf e "uncaught exception in %s" t))
+    :async-mode true}))
+
+
+(knitty.javaimpl.KDeferred/setExecutorProviderFn
+ (fn get-executor [] *executor*))
 
 ;; ==
 
