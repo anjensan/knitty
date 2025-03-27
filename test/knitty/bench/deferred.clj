@@ -118,16 +118,16 @@
   (tu/with-md-executor
     (testing :knitty
       (bench :let-x3-sync
-             @(kd/letm [x1 (d0)
-                        x2 (ninl-inc x1)
-                        x3 (d0)]
-                       (+ x1 x2 x3)))
+             @(kd/let-bind [x1 (d0)
+                            x2 (ninl-inc x1)
+                            x3 (d0)]
+                           (+ x1 x2 x3)))
       (bench :let-x5
-             @(kd/letm [x1 (d0)
-                        x2 (tu/md-future (ninl-inc x1))
-                        x3 (tu/md-future (ninl-inc x2))
-                        x4 (tu/md-future (ninl-inc x3))
-                        x5 (ninl-inc x4)]
+             @(kd/let-bind [x1 (d0)
+                            x2 (tu/md-future (ninl-inc x1))
+                            x3 (tu/md-future (ninl-inc x2))
+                            x4 (tu/md-future (ninl-inc x3))
+                            x5 (ninl-inc x4)]
                        x5))))
   ;;
   )

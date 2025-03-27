@@ -7,7 +7,7 @@
   :knitty/invalid-defyarn          {:level :error}}
 
  :lint-as
- {knitty.deferred/letm           clojure.core/let
+ {knitty.deferred/let-bind       clojure.core/let
   knitty.deferred/bind->         clojure.core/->
   knitty.deferred/while          clojure.core/while
   knitty.deferred/loop           clojure.core/loop

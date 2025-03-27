@@ -25,7 +25,7 @@
   ([x ex ef] (kd/bind-err x ex ef)))
 
 (defn finally [x f]
-  (kd/bind-fin x f))
+  (kd/bind-fnl x f))
 
 (defn ->deferred [x]
   (kd/wrap* x))

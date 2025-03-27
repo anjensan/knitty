@@ -79,29 +79,29 @@
               (kd/bind-err ArithmeticException (constantly :foo))))))
 
 
-(deftest test-letm
+(deftest test-let-bind
 
   (let [flag (atom false)]
     @(let [z (clojure.core/future 1)]
-       (kd/letm [z (kd/wrap* z)
-                 x (kd/future z)
-                 _ (kd/future (Thread/sleep 1000) (reset! flag true))
-                 y (kd/future (+ z x))]
+       (kd/let-bind [z (kd/wrap* z)
+                     x (kd/future z)
+                     _ (kd/future (Thread/sleep 1000) (reset! flag true))
+                     y (kd/future (+ z x))]
                 (kd/future (+ x x y z))))
     (is (= true @flag)))
 
   (is (= 5
          @(let [z (clojure.core/future 1)]
-            (kd/letm [z (kd/wrap* z)
+            (kd/let-bind [z (kd/wrap* z)
                       x (kd/future (kd/wrap* (clojure.core/future z)))
                       y (kd/future (+ z x))]
                      (kd/future (+ x x y z))))))
 
   (is (= 2
          @(let [d (kd/create)]
-            (kd/letm [[x] (future' [1])]
+            (kd/let-bind [[x] (future' [1])]
                      (kd/join
-                      (kd/letm [[x'] (future' [(inc x)])
+                      (kd/let-bind [[x'] (future' [(inc x)])
                                 y (future' true)]
                                (when y x'))))))))
 
@@ -341,7 +341,7 @@
 (deftest test-finally
   (let [target-d (kd/create)
         d        (kd/create)
-        fd       (kd/bind-fin
+        fd       (kd/bind-fnl
                    d
                    (fn []
                      (kd/success! target-d ::delivered)))]

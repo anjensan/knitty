@@ -9,6 +9,7 @@
    [clojure.tools.logging :as log]
    [manifold.deferred :as md])
   (:import
+   [clojure.lang Agent IFn Var]
    [java.util.concurrent Executor]
    [knitty.javaimpl KAwaiter KDeferred]
    [manifold.deferred IDeferred IMutableDeferred]))
@@ -55,29 +56,41 @@
 (defmacro do-wrap
   "Run `body` and returns value as deferred, catch and wrap any exceptions."
   [& body]
-  `(try
-     (wrap (do ~@body))
-     (catch Throwable e# (wrap-err e#))))
+  (if (or (not= 1 (count body))
+          (coll? (first body)))
+    `(try
+       (wrap (do ~@body))
+       (catch Throwable e# (wrap-err e#)))
+    `(wrap ~(first body))))
 
 (defn future-call
   "Equivalent to `clojure.core/future-call`, but returns a Knitty deferred."
-  ^KDeferred [f]
-  (let [frame (clojure.lang.Var/cloneThreadBindingFrame)
-        d (create)]
-    (.execute
-     clojure.lang.Agent/soloExecutor
-     (fn executor-task []
-       (clojure.lang.Var/resetThreadBindingFrame frame)
-       (try
-         (when-not (.realized d)
-           (.chain d (f) nil))
-         (catch Throwable e (.error d e nil)))))
-    d))
+  (^KDeferred [^IFn f]
+   (future-call Agent/soloExecutor f))
+  (^KDeferred [^Executor executor ^IFn f]
+   (let [frame (Var/cloneThreadBindingFrame)
+         d (create)]
+     (.execute
+      executor
+      (fn executor-task []
+        (let [frame' (Var/getThreadBindingFrame)]
+          (Var/resetThreadBindingFrame frame)
+          (try
+            (when-not (.realized d) (.chain d (f) nil))
+            (catch Throwable e (.error d e nil))
+            (finally
+              (Var/resetThreadBindingFrame frame'))))))
+     d)))
 
 (defmacro future
   "Equivalent to `clojure.core/future`, but returns a Knitty deferred."
   [& body]
   `(future-call (^{:once true} fn* [] ~@body)))
+
+(defmacro future-with
+  "Equivalent to `clo,jure.core/future`, but returns a Knitty deferred."
+  [executor & body]
+  `(future-call ~executor (^{:once true} fn* [] ~@body)))
 
 ;; ==
 
@@ -111,6 +124,18 @@
   [x]
   `(KDeferred/unwrap ~x))
 
+(defn peel
+  "Get deferred value. Throws exeption when deferred is not realized or failed with an error."
+  {:inline (fn ([d] `(.get (wrap ~d))))
+   :inline-arities #{1}}
+  ([d]
+   (.get (wrap d)))
+  ([d fallback]
+   (let [d (wrap d)]
+     (if (.realized d)
+       (.get d)
+       fallback))))
+
 ;; ==
 
 (defn on
@@ -138,8 +163,12 @@
   (^KDeferred [d val-fn] (KDeferred/bind d val-fn))
   (^KDeferred [d val-fn err-fn] (KDeferred/bind d val-fn err-fn)))
 
+(definline bind-val
+  [d val-fn]
+  `(bind ~d ~val-fn))
+
 (defn bind-onto
-  "Similar to `bind`, but run all callbacks on specified `executor`."
+  "Similar to `bind`, but run all callbacks on a provided `executor`."
   (^KDeferred [d ^Executor executor val-fn]
    (.bind (wrap d) val-fn nil executor))
   (^KDeferred [d ^Executor executor val-fn err-fn]
@@ -180,15 +209,15 @@
    (let [ep (build-err-predicate exc)]
      (bind-err mv (fn on-err [e] (if (ep e) (f e) (wrap-err e)))))))
 
-(defn bind-fin
+(defn bind-fnl
   "Bind 0-arg function to be executed when deferred is realized (either with value or error).
    Callback result is ignored, any thrown execiptions are re-wrapped.
    "
   (^KDeferred [d f0]
    (bind
     d
-    (fn on-val [x] (bind (f0) (fn ret-val [_] x)))
-    (fn on-err [e] (bind (f0) (fn ret-err [_] (wrap-err e)))))))
+    (^:once fn* on-val [x] (bind (f0) (fn ret-val [_] x)))
+    (^:once fn* on-err [e] (bind (f0) (fn ret-err [_] (wrap-err e)))))))
 
 (defmacro bind->
   "Combination of `bind` and threading macro `->`.
@@ -199,8 +228,15 @@
    `->
    `(do-wrap ~expr)
    (map (comp (partial list `bind)
-              #(if (seq? %) `(fn [x#] (-> x# ~%)) %))
+              #(if (seq? %) `(^:once fn* [x#] (-> x# ~%)) %))
         forms)))
+
+(defmacro bind=> [=> expr & forms]
+  (let [=>' (if (seq? =>) => (list =>))]
+    `(bind-> ~expr ~@(for [f forms]
+                       (if (symbol? f)
+                         f
+                         `(~@=>' ~f))))))
 
 (defn revoke
   "Returns new deferred connected to the provided.
@@ -277,16 +313,16 @@
   ^KDeferred [d]
   (bind d (fn [x] (if (deferred? x) (join x) x))))
 
-(defmacro letm
+(defmacro let-bind
   "Monadic let. Unwraps deferreds during binding, returning result as deferred.
    Unlike `manifold.deferred/let-flow` all steps are resolved in sequential order,
    so use `zip` if parallel execution is required.
    Steps list can contain :let and :when special forms.
 
-    (letm [[x y] (zip (kd/future (rand) (kd/future (rand)))
-           :when (< x y)  ;; whole letm returns nil when condition is not met
-           :let [d x]     ;; bind without unwrapping
-           z (kd/future (* x y))]
+    (let-bind [[x y] (zip (kd/future (rand) (kd/future (rand)))
+               :when (< x y)  ;; whole let-bind returns nil when condition is not met
+               :let [d x]     ;; bind without unwrapping
+               z (kd/future (* x y))]
       (vector x y z @d))
    "
   [binds & body]
@@ -296,9 +332,9 @@
     (let [[x y & rest-binds] binds
           rest-binds (vec rest-binds)]
       (cond
-        (= :when x) `(if ~y (letm ~rest-binds ~@body) (wrap-val nil))
-        (= :let x)  `(let ~y (letm ~rest-binds ~@body))
-        :else       `(bind ~y (fn [~x] (letm ~rest-binds ~@body)))))
+        (= :when x) `(if ~y (let-bind ~rest-binds ~@body) (wrap-val nil))
+        (= :let x)  `(let ~y (let-bind ~rest-binds ~@body))
+        :else       `(bind ~y (fn [~x] (let-bind ~rest-binds ~@body)))))
     `(wrap (do ~@body))))
 
 ;; ==
