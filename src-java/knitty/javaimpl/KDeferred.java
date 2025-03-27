@@ -1140,7 +1140,7 @@ public class KDeferred
 
     public static KDeferred bind(Object x, IFn valFn) {
         if (x instanceof IDeferred) {
-            KDeferred kd = wrapDeferred((IDeferred) x);
+            KDeferred kd = coerceDeferred((IDeferred) x);
             if (kd.succeeded == 1) {
                 x = kd.getRaw();
             } else {
@@ -1156,7 +1156,7 @@ public class KDeferred
 
     public static KDeferred bind(Object x, IFn valFn, IFn errFn) {
         if (x instanceof IDeferred) {
-            KDeferred kd = wrapDeferred((IDeferred) x);
+            KDeferred kd = coerceDeferred((IDeferred) x);
             if (kd.succeeded == 1) {
                 x = kd.getRaw();
             } else {
@@ -1206,9 +1206,6 @@ public class KDeferred
     }
 
     static KDeferred wrapDeferred(IDeferred x) {
-        if (x instanceof KDeferred) {
-            return (KDeferred) x;
-        }
         Object xx = x.successValue(MISS_VALUE);
         if (xx == MISS_VALUE) {
             KDeferred d = create();
@@ -1219,8 +1216,18 @@ public class KDeferred
         }
     }
 
+    static KDeferred coerceDeferred(IDeferred x) {
+        if (x instanceof KDeferred) {
+            return (KDeferred) x;
+        } else {
+            return wrapDeferred(x);
+        }
+    }
+
     public static KDeferred wrap(Object x) {
-        if (x instanceof IDeferred) {
+        if (x instanceof KDeferred) {
+            return (KDeferred) x;
+        } if (x instanceof IDeferred) {
             return wrapDeferred((IDeferred) x);
         } else {
             return wrapVal(x);
