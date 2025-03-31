@@ -722,7 +722,7 @@
                     (when-not (.realized d')
                       (try
                         (f d')
-                        (catch Throwable e (error! d e))))))))
+                        (catch Throwable e (error! d' e))))))))
              (long (unchecked-multiply delay 1000))
              java.util.concurrent.TimeUnit/MICROSECONDS)
          cf (fn [_] (.cancel sf false))]
