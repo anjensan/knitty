@@ -493,7 +493,9 @@
          @(-> (kd/create)
               (kd/timeout 1 ::timeout))))
 
-  (is (realized? (kd/timeout (kd/create) -1)))
+  (is (realized? (doto (kd/create)
+                   (kd/on #(do))
+                   (kd/timeout -1))))
 
   (is (thrown? java.util.concurrent.TimeoutException
                @(kd/timeout (kd/create) -1)))
