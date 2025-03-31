@@ -719,11 +719,11 @@
              *sched-executor*
              ^Runnable
              (fn []
-               (when-some [d' (.get r)]
+               (when-some [^IDeferred d' (.get r)]
                  (.execute
                   me
                   (fn []
-                    (when-not (.realized d)
+                    (when-not (.realized d')
                       (try
                         (f d')
                         (catch Throwable e (error! d e))))))))
