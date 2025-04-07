@@ -41,7 +41,7 @@
 
 (defn on-realized
   [x on-success on-error]
-  (kd/on x on-success on-error))
+  (kd/listen! x on-success on-error))
 
 (defn claim! [d]
   (kd/claim! d))

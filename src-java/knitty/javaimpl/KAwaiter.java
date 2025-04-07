@@ -57,7 +57,6 @@ public final class KAwaiter {
     @SuppressWarnings("FieldMayBeFinal")
     private int ncnt = Integer.MAX_VALUE;
 
-    private static final Object TOMB = new Object();
     private static final VarHandle CNT;
     static {
         try {
@@ -86,7 +85,7 @@ public final class KAwaiter {
 
 
     public void add(KDeferred x1) {
-        if (x1.succeeded == 0) {
+        if (x1.state != 1) {
             if (this.acnt <= 0) {
                 throw new IllegalStateException("too much deferreds are awaited");
             }
@@ -96,7 +95,7 @@ public final class KAwaiter {
     }
 
     public static boolean await1(AFn ls, KDeferred x1) {
-        if (x1.succeeded == 1) {
+        if (x1.state == 1) {
             return true;
         } else {
             x1.listen(new L0(ls));
@@ -150,27 +149,27 @@ public final class KAwaiter {
     }
 
     public static final boolean isSucceeded(KDeferred x1) {
-        return x1.succeeded == 1;
+        return x1.state == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2) {
-        return (x1.succeeded & x2.succeeded) == 1;
+        return (x1.state & x2.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded) == 1;
+        return (x1.state & x2.state & x3.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3, KDeferred x4) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded & x4.succeeded) == 1;
+        return (x1.state & x2.state & x3.state & x4.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3, KDeferred x4, KDeferred x5) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded & x4.succeeded & x5.succeeded) == 1;
+        return (x1.state & x2.state & x3.state & x4.state & x5.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3, KDeferred x4, KDeferred x5, KDeferred x6) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded & x4.succeeded & x5.succeeded & x6.succeeded) == 1;
+        return (x1.state & x2.state & x3.state & x4.state & x5.state & x6.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3, KDeferred x4, KDeferred x5, KDeferred x6, KDeferred x7) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded & x4.succeeded & x5.succeeded & x6.succeeded & x7.succeeded) == 1;
+        return (x1.state & x2.state & x3.state & x4.state & x5.state & x6.state & x7.state) == 1;
     }
     public static final boolean isSucceeded(KDeferred x1, KDeferred x2, KDeferred x3, KDeferred x4, KDeferred x5, KDeferred x6, KDeferred x7, KDeferred x8) {
-        return (x1.succeeded & x2.succeeded & x3.succeeded & x4.succeeded & x5.succeeded & x6.succeeded & x7.succeeded & x8.succeeded) == 1;
+        return (x1.state & x2.state & x3.state & x4.state & x5.state & x6.state & x7.state & x8.state) == 1;
     }
 }

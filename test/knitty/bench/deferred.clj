@@ -355,7 +355,12 @@
         (bench :success-deref
                (let [d (create-d)]
                  (md/success! d 1)
-                 @d))))))
+                 @d))
+        (bench :success-kdpeel
+               (let [d (create-d)]
+                 (md/success! d 1)
+                 (kd/peel d)))
+        ))))
 
 (comment
   (clojure.test/test-ns *ns*))

@@ -232,6 +232,6 @@
         (let [f (fn [x]
                   (when-some [s (trace/find-traces x)]
                     (tracker (yarn-timings s yarns events))))]
-          (kd/on yank-result f f))
+          (kd/listen! yank-result f f))
         yank-result))))
 

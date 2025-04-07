@@ -25,13 +25,13 @@
 
 (defn capture-success [result]
   (let [p (promise)]
-    (kd/on result p (fn [_] (p ::unexpected-error)))
+    (kd/listen! result p (fn [_] (p ::unexpected-error)))
     p))
 
 
 (defn capture-error [result]
   (let [p (promise)]
-    (kd/on result (fn [_] (p ::unexpected-error)) p)
+    (kd/listen! result (fn [_] (p ::unexpected-error)) p)
     p))
 
 
@@ -345,7 +345,7 @@
                    d
                    (fn []
                      (kd/success! target-d ::delivered)))]
-    (kd/on fd identity identity)  ;; clear ELD
+    (kd/listen! fd identity identity)  ;; clear ELD
     (kd/error! d (Exception.))
     (is (= ::delivered (deref target-d 0 ::not-delivered)))))
 
@@ -357,7 +357,7 @@
   (is (= 2 @(kd/alt (doto
                      (kd/future (Thread/sleep 10)
                                 (throw (Exception. "boom")))
-                      (kd/on *))
+                      (kd/listen! identity identity))
                     2)))
 
   (is (thrown-with-msg? Exception #"boom"
@@ -494,7 +494,7 @@
               (kd/timeout 1 ::timeout))))
 
   (is (realized? (doto (kd/create)
-                   (kd/on #(do))
+                   (kd/listen! identity identity)
                    (kd/timeout -1))))
 
   (is (thrown? java.util.concurrent.TimeoutException

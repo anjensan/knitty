@@ -149,7 +149,7 @@ public final class YankCtx {
                     int i = kwMapper.resolveByKeyword((Keyword) k);
                     if (i != -1) {
                         KDeferred d = ctx.pull(i);
-                        if (d.own()) {
+                        if (d.retain()) {
                             d.chain(v, ctx.token);
                         }
                     }
@@ -301,7 +301,7 @@ public final class YankCtx {
 
     public final KDeferred fetch(int i, Keyword k, AFn y) {
         KDeferred d = pull(i);
-        if (d.own() && fetch0(d, i, k)) {
+        if (d.retain() && fetch0(d, i, k)) {
             y.invoke(this, d);
         }
         return d;
@@ -309,7 +309,7 @@ public final class YankCtx {
 
     public final KDeferred fetch(int i, Keyword k) {
         KDeferred d = pull(i);
-        if (d.own() && fetch0(d, i, k)) {
+        if (d.retain() && fetch0(d, i, k)) {
             AFn y = this.yarn(i);
             y.invoke(this, d);
         }
@@ -345,7 +345,7 @@ public final class YankCtx {
     YankResult finish() {
         KVCons added0 = this.freeze();
         for (KVCons a = added0; a.d != null; a = a.next) {
-            if (a.d.own()) {
+            if (a.d.retain()) {
                 a.d.error(RevokeException.DEFERRED_REVOKED, this.token);
             }
         }

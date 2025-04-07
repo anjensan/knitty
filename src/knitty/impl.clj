@@ -242,13 +242,14 @@
 
 (defmacro connect-result [yctx ykey result dest]
   `(if (kd/deferred? ~result)
-     (kd/on ~result
-            (fn ~'on-val [x#]
-              (tracer-> ~yctx .traceFinish ~ykey x# nil true)
-              (pool-run ~yctx (.fireValue ~dest x# (.-token ~yctx))))
-            (fn ~'on-err [e#]
-              (tracer-> ~yctx .traceFinish ~ykey nil e# true)
-              (pool-run ~yctx (.fireError ~dest e# (.-token ~yctx)))))
+     (kd/listen!
+      ~result
+      (fn ~'on-val [x#]
+        (tracer-> ~yctx .traceFinish ~ykey x# nil true)
+        (pool-run ~yctx (.fireValue ~dest x# (.-token ~yctx))))
+      (fn ~'on-err [e#]
+        (tracer-> ~yctx .traceFinish ~ykey nil e# true)
+        (pool-run ~yctx (.fireError ~dest e# (.-token ~yctx)))))
      (do
        (tracer-> ~yctx .traceFinish ~ykey ~result nil false)
        (.fireValue ~dest ~result (.-token ~yctx)))))

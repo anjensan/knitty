@@ -26,7 +26,7 @@ import manifold.deferred.IDeferredListener;
 import manifold.deferred.IMutableDeferred;
 
 @SuppressWarnings({"unused", "unchecked", "rawtypes"})
-public class KDeferred
+public final class KDeferred
         extends AFn
         implements
         clojure.lang.IDeref,
@@ -503,14 +503,14 @@ public class KDeferred
 
     private static final VarHandle TOKEN;
     private static final VarHandle VALUE;
-    private static final VarHandle OWNED;
+    private static final VarHandle STATE;
     private static final VarHandle LHEAD;
 
     static {
         try {
             MethodHandles.Lookup l = MethodHandles.lookup();
+            STATE = l.findVarHandle(KDeferred.class, "state", Byte.TYPE);
             TOKEN = l.findVarHandle(KDeferred.class, "_token", Object.class);
-            OWNED = l.findVarHandle(KDeferred.class, "_owned", Byte.TYPE);
             VALUE = l.findVarHandle(KDeferred.class, "_value", Object.class);
             LHEAD = l.findVarHandle(KDeferred.class, "_lhead", AListener.class);
         } catch (ReflectiveOperationException var1) {
@@ -548,31 +548,26 @@ public class KDeferred
     private final static Object MISS_VALUE = new MissValue();
     private final static AListener LS_TOMB = new LsTomb();
 
-    private byte _owned;
-    byte succeeded;
-    private Object _value;
-    private Object _token;
-    private AListener _lhead;
+    byte state;
+    private volatile Object _value;
+    private volatile Object _token;
+    private volatile AListener _lhead;
     private IPersistentMap meta;
 
     private KDeferred() {
     }
 
-    public final boolean own() {
-        if ((byte) OWNED.getOpaque(this) == 1) {
+    public boolean retain() {
+        if (state != 0 && (byte) STATE.getOpaque(this) != 0) {
             return false;
         }
-        while (!OWNED.weakCompareAndSetPlain(this, (byte) 0, (byte) 1)) {
-            if ((byte) OWNED.getOpaque(this) == (byte) 1) {
+        while (!STATE.weakCompareAndSetPlain(this, (byte) 0, (byte) 4)) {
+            if ((byte) STATE.getOpaque(this) != (byte) 0) {
                 return false;
             }
             Thread.onSpinWait();
         }
         return true;
-    }
-
-    public final boolean owned() {
-        return (byte) OWNED.getOpaque(this) == 1;
     }
 
     @Override
@@ -718,7 +713,7 @@ public class KDeferred
 
     private void fireSuccessListeners(Object x) {
         AListener node = tombListeners();
-        this.succeeded = 1;
+        this.state = 1;
         for (; node != null; node = node.next) {
             try {
                 node.success(x);
@@ -730,6 +725,7 @@ public class KDeferred
 
     private void fireErrorListeners(ErrBox eb) {
         AListener node = tombListeners();
+        this.state = 2;
         if (node == null) {
             eb.detectLeakedError(this);
         } else {
@@ -931,12 +927,12 @@ public class KDeferred
 
     @Override
     public boolean realized() {
-        return this.succeeded == 1 || VALUE.getOpaque(this) != MISS_VALUE;
+        return ((this.state & 3) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
     }
 
     @Override
     public boolean isRealized() {
-        return this.succeeded == 1 || VALUE.getOpaque(this) != MISS_VALUE;
+        return ((this.state & 3) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
     }
 
     @Override
@@ -967,16 +963,16 @@ public class KDeferred
         return (v == MISS_VALUE || (v instanceof ErrBox)) ? this : v;
     }
 
-    public final Object getRaw() {
+    public Object getRaw() {
         return VALUE.getAcquire(this);
     }
 
-    public final Object get() {
+    public Object get() {
         Object v = this.getRaw();
         return (v instanceof ErrBox) ? ((ErrBox) v).raise() : v;
     }
 
-    public final Object get(IFn onErr) {
+    public Object get(IFn onErr) {
         Object v = this.getRaw();
         if (v instanceof ErrBox) {
             return onErr.invoke(((ErrBox) v).getError());
@@ -1085,17 +1081,22 @@ public class KDeferred
     }
 
     public KDeferred bind(IFn valFn) {
+        byte scd = this.state;
         Object v = this.getRaw();
-        if (v == MISS_VALUE) {
-            KDeferred dest = create();
-            if (this.listen0(new Bind(dest, valFn, null))) {
-                return dest;
+
+        if (scd != 1) {
+            if (v == MISS_VALUE) {
+                KDeferred dest = create();
+                if (this.listen0(new Bind(dest, valFn, null))) {
+                    return dest;
+                }
+                v = this.getRaw();
             }
-            v = this.getRaw();
+            if (v instanceof ErrBox) {
+                return this;
+            }
         }
-        if (v instanceof ErrBox) {
-            return this;
-        }
+
         try {
             return wrap(valFn.invoke(v));
         } catch (Throwable e) {
@@ -1104,21 +1105,25 @@ public class KDeferred
     }
 
     public KDeferred bind(IFn valFn, IFn errFn) {
+        byte scd = this.state;
         Object v = this.getRaw();
-        if (v == MISS_VALUE) {
-            KDeferred dest = create();
-            if (this.listen0(new Bind(dest, valFn, errFn))) {
-                return dest;
+
+        if (scd != 1) {
+            if (v == MISS_VALUE) {
+                KDeferred dest = create();
+                if (this.listen0(new Bind(dest, valFn, errFn))) {
+                    return dest;
+                }
+                v = this.getRaw();
             }
-            v = this.getRaw();
-        }
-        if (v instanceof ErrBox) {
-            if (errFn == null) {
-                return this;
-            } else {
-                valFn = errFn;
-                ErrBox eb = (ErrBox) v;
-                v = eb.getError();
+            if (v instanceof ErrBox) {
+                if (errFn == null) {
+                    return this;
+                } else {
+                    valFn = errFn;
+                    ErrBox eb = (ErrBox) v;
+                    v = eb.getError();
+                }
             }
         }
         try {
@@ -1141,7 +1146,7 @@ public class KDeferred
     public static KDeferred bind(Object x, IFn valFn) {
         if (x instanceof IDeferred) {
             KDeferred kd = coerceDeferred((IDeferred) x);
-            if (kd.succeeded == 1) {
+            if (kd.state == 1) {
                 x = kd.getRaw();
             } else {
                 return kd.bind(valFn);
@@ -1157,7 +1162,7 @@ public class KDeferred
     public static KDeferred bind(Object x, IFn valFn, IFn errFn) {
         if (x instanceof IDeferred) {
             KDeferred kd = coerceDeferred((IDeferred) x);
-            if (kd.succeeded == 1) {
+            if (kd.state == 1) {
                 x = kd.getRaw();
             } else {
                 return kd.bind(valFn, errFn);
@@ -1193,6 +1198,7 @@ public class KDeferred
         LHEAD.setOpaque(d, LS_TOMB);
         VALUE.setRelease(d, eb);
         eb.detectLeakedError(d);
+        d.state = 2;
         return d;
     }
 
@@ -1201,7 +1207,7 @@ public class KDeferred
         LHEAD.setOpaque(d, LS_TOMB);
         VALUE.setRelease(d, x);
         VarHandle.storeStoreFence();
-        d.succeeded = 1;
+        d.state = 1;
         return d;
     }
 
@@ -1216,7 +1222,7 @@ public class KDeferred
         }
     }
 
-    static KDeferred coerceDeferred(IDeferred x) {
+    public static KDeferred coerceDeferred(IDeferred x) {
         if (x instanceof KDeferred) {
             return (KDeferred) x;
         } else {
@@ -1244,6 +1250,10 @@ public class KDeferred
             kd.chain(dd, null);
             return kd;
         }
+    }
+
+    public static Object peel(Object x) {
+        return (x instanceof IDeferred) ? coerceDeferred((IDeferred) x).get() : x;
     }
 
     public static Object unwrap(Object x) {

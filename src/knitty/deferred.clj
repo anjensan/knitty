@@ -213,30 +213,26 @@
 
 (defn peel
   "Get deferred value. Throws exeption when deferred is not realized or failed with an error."
-  {:inline (fn ([d] `(.get (wrap ~d))))
+  {:inline (fn ([d] `(KDeferred/peel ~d)))
    :inline-arities #{1}}
   ([d]
-   (.get (wrap d)))
+   (KDeferred/peel d))
   ([d fallback]
-   (let [d (wrap d)]
-     (if (.realized d)
-       (.get d)
-       fallback))))
+   (if (deferred? d)
+     (let [d (KDeferred/coerceDeferred d)]
+       (if (.realized d)
+         (.get d)
+         fallback))
+     d)))
 
 ;; ==
 
-(defn on
+(definline listen!
   "Registers callback fns to run when deferred is realized.
    When only one callback is provided it shold be 0-arg fn.
    When both callbacks provided - they must accept 1 argument (value or error)."
-  {:inline (fn
-             ([x on-any] `(let [f# (fn ~'on-any' [_#] (~on-any))] (.listen (wrap ~x) f# f#)))
-             ([x on-ok on-err] `(.listen (wrap ~x) ~on-ok ~on-err)))
-   :inline-arities #{2 3}}
-  ([x on-any]
-   (let [f (fn on-any' [_] (on-any))] (.listen (wrap x) f f)))
-  ([x on-ok on-err]
-   (.listen (wrap x) on-ok on-err)))
+  [x on-ok on-err]
+  `(.listen (wrap ~x) ~on-ok ~on-err))
 
 (defn bind
   "Bind 1-arg callbacks fn to deferred. Returns new deferred with amended value.
@@ -600,8 +596,8 @@
     [fn3 [retrn-x] & retrn-body]]
    {:pre [(every? #{`fn 'fn} [fn1 fn2 fn3])]}
    `(let [d# (create)
-          ef# (fn ~'on-err [e#] (error! d# e#))]
-      (on
+          ef# (fn ~'on-err [e#] (.fireError d# e#))]
+      (listen!
        ~init
        (fn loop-step# [xx#]
          (when-not (.realized d#)
@@ -728,9 +724,9 @@
                         (f d')
                         (catch Throwable e (error! d e))))))))
              (long (unchecked-multiply delay 1000))
-             java.util.concurrent.TimeUnit/MICROSECONDS)]
-        (doto d
-          (on (fn [] (.cancel sf false))))))
+             java.util.concurrent.TimeUnit/MICROSECONDS)
+         cf (fn [] (.cancel sf false))]
+        (doto d (listen! cf cf))))
 
 (defn sleep
   ([time-ms]
