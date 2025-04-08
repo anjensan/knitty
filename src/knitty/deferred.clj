@@ -725,7 +725,7 @@
                         (catch Throwable e (error! d e))))))))
              (long (unchecked-multiply delay 1000))
              java.util.concurrent.TimeUnit/MICROSECONDS)
-         cf (fn [] (.cancel sf false))]
+         cf (fn [_] (.cancel sf false))]
         (doto d (listen! cf cf))))
 
 (defn sleep
