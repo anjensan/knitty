@@ -136,7 +136,8 @@
 (defn wrap*
   "Corece `x` into an instance of Knitty deferred.  Converts non-deferred futures with `manifold.deferred/->deferred`."
   ^KDeferred [x]
-  (if-some [y (manifold.deferred/->deferred x nil)]
+  (if-some [y #_{:clj-kondo/ignore [:unresolved-var]}
+              (manifold.deferred/->deferred x nil)]
     (wrap y)
     (wrap-val x)))
 
@@ -761,8 +762,10 @@
 
 (defmethod print-method KDeferred [y ^java.io.Writer w]
   (.write w "#knitty/D[")
-  (let [error (md/error-value y ::none)
-        value (md/success-value y ::none)]
+  (let [error #_{:clj-kondo/ignore [:unresolved-var]}
+              (md/error-value y ::none)
+        value #_{:clj-kondo/ignore [:unresolved-var]}
+              (md/success-value y ::none)]
 
     (cond
       (not (identical? error ::none))
@@ -786,8 +789,10 @@
 (set! *unchecked-math* false)
 
 (defn- pprint-kdeferred [o]
-  (let [error (md/error-value o ::none)
-        value (md/success-value o ::none)
+  (let [error #_{:clj-kondo/ignore [:unresolved-var]}
+              (md/error-value o ::none)
+        value #_{:clj-kondo/ignore [:unresolved-var]}
+              (md/success-value o ::none)
         error? (not (identical? error ::none))
         value? (not (identical? value ::none))
         prefix (format "#<%s@%x: "
