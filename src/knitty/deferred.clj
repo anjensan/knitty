@@ -258,18 +258,11 @@
   `(bind ~d ~val-fn))
 
 (defn bind-onto
-  "Similar to `bind`, but run all callbacks on a provided `executor`."
+  "Similar to `bind`, but callbacks on a provided `executor`."
   (^KDeferred [d ^Executor executor val-fn]
    (.bind (wrap d) val-fn nil executor))
   (^KDeferred [d ^Executor executor val-fn err-fn]
    (.bind (wrap d) val-fn err-fn executor)))
-
-(defn onto
-  "Returns a deferred whose callbacks will be run on `executor`."
-  ^KDeferred [d ^Executor executor]
-  (if (nil? executor)
-    (wrap d)
-    (bind-onto d identity wrap-err)))
 
 (defn- map-subset? [a-map b-map]
   (every? (fn [[k :as e]] (= e (find b-map k))) a-map))
