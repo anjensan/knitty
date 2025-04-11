@@ -509,7 +509,7 @@ public final class KDeferred
     static {
         try {
             MethodHandles.Lookup l = MethodHandles.lookup();
-            STATE = l.findVarHandle(KDeferred.class, "state", Byte.TYPE);
+            STATE = l.findVarHandle(KDeferred.class, "weakState", Byte.TYPE);
             TOKEN = l.findVarHandle(KDeferred.class, "_token", Object.class);
             VALUE = l.findVarHandle(KDeferred.class, "_value", Object.class);
             LHEAD = l.findVarHandle(KDeferred.class, "_lhead", AListener.class);
@@ -548,7 +548,13 @@ public final class KDeferred
     private final static Object MISS_VALUE = new MissValue();
     private final static AListener LS_TOMB = new LsTomb();
 
-    byte state;
+    final static byte STATE_INIT = 0b0000;
+    final static byte STATE_SUCC = 0b0001;
+    final static byte STATE_ERRR = 0b0010;
+    final static byte STATE_RTND = 0b0100;
+    final static byte STATE_MASK_RLZD = 0b0011;
+
+    byte weakState;
     private volatile Object _value;
     private volatile Object _token;
     private volatile AListener _lhead;
@@ -558,11 +564,11 @@ public final class KDeferred
     }
 
     public boolean retain() {
-        if (state != 0 && (byte) STATE.getOpaque(this) != 0) {
+        if (weakState != STATE_INIT && (byte) STATE.getOpaque(this) != STATE_INIT) {
             return false;
         }
-        while (!STATE.weakCompareAndSetPlain(this, (byte) 0, (byte) 4)) {
-            if ((byte) STATE.getOpaque(this) != (byte) 0) {
+        while (!STATE.weakCompareAndSetPlain(this, STATE_INIT, STATE_RTND)) {
+            if ((byte) STATE.getOpaque(this) != STATE_INIT) {
                 return false;
             }
             Thread.onSpinWait();
@@ -713,7 +719,7 @@ public final class KDeferred
 
     private void fireSuccessListeners(Object x) {
         AListener node = tombListeners();
-        this.state = 1;
+        this.weakState = STATE_SUCC;
         for (; node != null; node = node.next) {
             try {
                 node.success(x);
@@ -725,7 +731,7 @@ public final class KDeferred
 
     private void fireErrorListeners(ErrBox eb) {
         AListener node = tombListeners();
-        this.state = 2;
+        this.weakState = STATE_ERRR;
         if (node == null) {
             eb.detectLeakedError(this);
         } else {
@@ -927,12 +933,12 @@ public final class KDeferred
 
     @Override
     public boolean realized() {
-        return ((this.state & 3) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
+        return ((this.weakState & STATE_MASK_RLZD) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
     }
 
     @Override
     public boolean isRealized() {
-        return ((this.state & 3) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
+        return ((this.weakState & STATE_MASK_RLZD) != 0) || VALUE.getOpaque(this) != MISS_VALUE;
     }
 
     @Override
@@ -967,6 +973,7 @@ public final class KDeferred
         return VALUE.getAcquire(this);
     }
 
+    @Override
     public Object get() {
         Object v = this.getRaw();
         return (v instanceof ErrBox) ? ((ErrBox) v).raise() : v;
@@ -1081,56 +1088,38 @@ public final class KDeferred
     }
 
     public KDeferred bind(IFn valFn) {
-        byte scd = this.state;
         Object v = this.getRaw();
-
-        if (scd != 1) {
-            if (v == MISS_VALUE) {
-                KDeferred dest = create();
-                if (this.listen0(new Bind(dest, valFn, null))) {
-                    return dest;
-                }
-                v = this.getRaw();
+        if (v == MISS_VALUE) {
+            KDeferred dest = create();
+            this.listen(new Bind(dest, valFn, null));
+            return dest;
+        } else if (v instanceof ErrBox) {
+            return this;
+        } else {
+            try {
+                return wrap(valFn.invoke(v));
+            } catch (Throwable e) {
+                return wrapErr(e);
             }
-            if (v instanceof ErrBox) {
-                return this;
-            }
-        }
-
-        try {
-            return wrap(valFn.invoke(v));
-        } catch (Throwable e) {
-            return wrapErr(e);
         }
     }
 
     public KDeferred bind(IFn valFn, IFn errFn) {
-        byte scd = this.state;
         Object v = this.getRaw();
-
-        if (scd != 1) {
-            if (v == MISS_VALUE) {
-                KDeferred dest = create();
-                if (this.listen0(new Bind(dest, valFn, errFn))) {
-                    return dest;
-                }
-                v = this.getRaw();
+        if (v == MISS_VALUE) {
+            KDeferred dest = create();
+            this.listen(new Bind(dest, valFn, errFn));
+            return dest;
+        } else {
+            try {
+                return wrap(
+                    (v instanceof ErrBox)
+                    ? errFn.invoke(((ErrBox) v).getError())
+                    : valFn.invoke(v)
+                );
+            } catch (Throwable e) {
+                return wrapErr(e);
             }
-            if (v instanceof ErrBox) {
-                if (errFn == null) {
-                    return this;
-                } else {
-                    valFn = errFn;
-                    ErrBox eb = (ErrBox) v;
-                    v = eb.getError();
-                }
-            }
-        }
-        try {
-            KDeferred r = wrap(valFn.invoke(v));
-            return r;
-        } catch (Throwable e) {
-            return wrapErr(e);
         }
     }
 
@@ -1146,11 +1135,10 @@ public final class KDeferred
     public static KDeferred bind(Object x, IFn valFn) {
         if (x instanceof IDeferred) {
             KDeferred kd = coerceDeferred((IDeferred) x);
-            if (kd.state == 1) {
-                x = kd.getRaw();
-            } else {
+            if (kd.weakState != STATE_SUCC) {
                 return kd.bind(valFn);
             }
+            x = kd.getRaw();
         }
         try {
             return wrap(valFn.invoke(x));
@@ -1162,11 +1150,10 @@ public final class KDeferred
     public static KDeferred bind(Object x, IFn valFn, IFn errFn) {
         if (x instanceof IDeferred) {
             KDeferred kd = coerceDeferred((IDeferred) x);
-            if (kd.state == 1) {
-                x = kd.getRaw();
-            } else {
+            if (kd.weakState != STATE_SUCC) {
                 return kd.bind(valFn, errFn);
             }
+            x = kd.getRaw();
         }
         try {
             return wrap(valFn.invoke(x));
@@ -1198,7 +1185,8 @@ public final class KDeferred
         LHEAD.setOpaque(d, LS_TOMB);
         VALUE.setRelease(d, eb);
         eb.detectLeakedError(d);
-        d.state = 2;
+        VarHandle.storeStoreFence();
+        d.weakState = STATE_ERRR;
         return d;
     }
 
@@ -1207,7 +1195,7 @@ public final class KDeferred
         LHEAD.setOpaque(d, LS_TOMB);
         VALUE.setRelease(d, x);
         VarHandle.storeStoreFence();
-        d.state = 1;
+        d.weakState = STATE_SUCC;
         return d;
     }
 

@@ -418,7 +418,7 @@
         (= :when x) `(if ~y (let-bind ~rest-binds ~@body) (wrap-val nil))
         (= :let x)  `(let ~y (let-bind ~rest-binds ~@body))
         :else       `(bind ~y (fn [~x] (let-bind ~rest-binds ~@body)))))
-    `(wrap (do ~@body))))
+    `(do-wrap ~@body)))
 
 ;; ==
 
