@@ -40,6 +40,7 @@ public final class KDeferred
     {
 
     private static abstract class ErrBox {
+
         public abstract Object getError();
         public abstract void detectLeakedError(KDeferred d);
 
@@ -838,7 +839,7 @@ public final class KDeferred
         IFn onErr = (IFn) onErrr;
         Object v = this.getRaw();
         if (v == MISS_VALUE) {
-            if (this.listen0(new Fn(onSuc, onErr))) {
+            if (this.listen0(onSuc, onErr)) {
                 return true;
             }
             v = this.getRaw();
@@ -973,7 +974,6 @@ public final class KDeferred
         return VALUE.getAcquire(this);
     }
 
-    @Override
     public Object get() {
         Object v = this.getRaw();
         return (v instanceof ErrBox) ? ((ErrBox) v).raise() : v;
