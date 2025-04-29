@@ -89,7 +89,7 @@
          (ScheduledThreadPoolExecutor.
           1
           (ex/thread-factory
-           #(str "kdeferred-schedpool-" (swap! acnt inc))
+           #(str "knitty-sched-" (swap! acnt inc))
            self
            nil
            true
@@ -236,8 +236,8 @@
              ([x on-ok on-err] `(.listen (wrap ~x) ~on-ok ~on-err)))
    :inline-arities #{3}}
   ([x on-any]
-   (let [f (fn on-any' [_] (on-any))]
-     (listen! x f f)))
+   (letfn [(on-any' [_] (on-any))]
+     (listen! x on-any' on-any')))
   ([x on-ok on-err]
    (.listen (wrap x) on-ok on-err)))
 
