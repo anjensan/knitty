@@ -122,7 +122,9 @@
 
 
 (defn track-results [results]
-  (swap! *bench-results* conj [(current-test-id) results])
+  (swap! *bench-results* conj
+         [(current-test-id)
+          (dissoc results :runtime-details :os-details :options)])
   (print "\t ⟶ ")
   (print "time" (fmt-time-value (first (:mean results))))
   (let [[v] (:variance results), m (math/sqrt v)]
@@ -153,6 +155,9 @@
 
       (spit res-file (pr-str {:id testid
                               :when (java.util.Date.)
+                              :details {:os (cc/os-details)
+                                        :runtime (cc/runtime-details)
+                                        :options benchmark-opts}
                               :results rs}))
       (let [idlen (reduce max 10 (map (comp count first) rs))
             idf (str "%-" idlen "s")]
@@ -200,7 +205,7 @@
    `do
    (for [b body]
      `(binding [*ns* ~*ns*]
-        (eval '~b))))) 34
+        (eval '~b)))))
 
 
 (defmacro slow-future [delay & body]
@@ -229,33 +234,27 @@
              (.bindRoot #'md-debug/*dropped-error-logging-enabled?* e))))))
 
 
-(def defer-callbacks (java.util.concurrent.atomic.AtomicReference.))
-(def defer-random (java.util.Random.))
-
-
-(defmacro with-defer [body]
-  `(let [^java.util.concurrent.atomic.AtomicReference dcs# defer-callbacks]
-     (try
-       (.set dcs# (java.util.ArrayList.))
-       ~body
-       (finally
-         (loop []
-           (let [^java.util.ArrayList xxs# (.get dcs#)]
-             (when (not (.isEmpty xxs#))
-               (.set dcs# (java.util.ArrayList.))
-               (dotimes [i# (.size xxs#)] ((.get xxs# i#)))
-               (recur))))))))
+(defmacro with-defer [& body]
+  (when (contains? &env '_-defer-callbacks)
+    (throw (ex-info "nested (with-defer ..)" {})))
+  (let [dc '_-defer-callbacks]
+    `(let [~dc (java.util.ArrayList.)]
+       (try
+         ~@body
+         (finally
+           (loop []
+             (when-not (.isEmpty ~dc)
+               (java.util.Collections/shuffle ~dc)
+               (let [^Object/1 xxs# (.toArray ~dc)]
+                 (.clear ~dc)
+                 (areduce xxs# i# _ret# nil ((aget xxs# i#)))
+                 (recur)))))))))
 
 
 (defmacro defer! [callback]
-  `(let [^java.util.concurrent.atomic.AtomicReference dcs# defer-callbacks
-         ^java.util.ArrayList xxs# (.get dcs#)
-         ^java.util.Random rnd# defer-random
-         n# (.size xxs#)]
-     (.add xxs# (fn [] ~callback))
-     (java.util.Collections/swap xxs#
-                                 (.nextInt rnd# (unchecked-inc-int n#))
-                                 n#)))
+  (when-not (contains? &env '_-defer-callbacks)
+    (throw (ex-info "defer! is called outside of (with-defer ..)" {})))
+  `(.add ~'_-defer-callbacks (fn [] ~callback)))
 
 
 (def always-false false)
@@ -286,6 +285,11 @@
   "Equivalent to 'manifold.deferred/future', but use didicated executor"
   [& body]
   `(md/future-with ~'__knitty__test_util__md_executor ~@body))
+
+(defmacro kt-future
+  "Equivalent to 'manifold.deferred/future', but use didicated executor"
+  [& body]
+  `(kd/future-with ~'__knitty__test_util__md_executor ~@body))
 
 
 (defn dotimes-prn* [n body-fn]
