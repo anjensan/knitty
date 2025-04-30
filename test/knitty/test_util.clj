@@ -103,10 +103,10 @@
 
 
 (defn current-test-id []
-  (str/join "/"
-            (concat
-             (reverse (map #(:name (meta %)) t/*testing-vars*))
-             (reverse t/*testing-contexts*))))
+  (vec
+   (concat
+    (reverse (map #(:name (meta %)) t/*testing-vars*))
+    (reverse t/*testing-contexts*))))
 
 
 (defn fmt-time-value
@@ -123,8 +123,9 @@
 
 (defn track-results [results]
   (swap! *bench-results* conj
-         [(current-test-id)
-          (dissoc results :runtime-details :os-details :options)])
+         (-> results
+             (assoc :test-id (current-test-id))
+             (dissoc :runtime-details :os-details :options)))
   (print "\t ⟶ ")
   (print "time" (fmt-time-value (first (:mean results))))
   (let [[v] (:variance results), m (math/sqrt v)]
@@ -141,37 +142,43 @@
   (let [testid (tests-run-id)
         rs @*bench-results*
         res-file (io/file (str bench-results-dir "/" testid ".edn"))]
+
     (io/make-parents res-file)
+    (spit res-file
+          (pr-str {:id testid
+                   :when (java.util.Date.)
+                   :details {:os (cc/os-details)
+                             :runtime (cc/runtime-details)
+                             :options benchmark-opts}
+                   :results rs}))
+
     (let [oldr (->>
                 (file-seq (io/file bench-results-dir))
-                (next)
+                (remove #(.isDirectory ^java.io.File %))
+                (remove #(= % res-file))
                 (map (comp read-string slurp))
                 (sort-by #(let [^java.util.Date w (:when %)] (.getTime w))))
           oids (map :id oldr)
           oldm (into {}
                      (for [ors oldr
-                           [k r] (:results ors)]
-                       [[(:id ors) k] r]))]
+                           r (:results ors)]
+                       [[(:id ors) (:test-id r)] r]))
+          idlen (reduce max 10 (map (comp count str :test-id) rs))
+          idf (str "%-" idlen "s")
+          ]
+      (println "\nbench results:")
+      (pp/print-table
+       (for [r rs]
+         (let [k (:test-id r)
+               v (-> r :mean first)]
+           (into
+            {:id (format idf (str/join "/" k))
+             :time (fmt-time-value v)}
+            (for [oid oids
+                  :let [or (get oldm [oid k])]]
+              [oid (some-> or :mean first (/ v) fmt-ratio-diff)])))))
 
-      (spit res-file (pr-str {:id testid
-                              :when (java.util.Date.)
-                              :details {:os (cc/os-details)
-                                        :runtime (cc/runtime-details)
-                                        :options benchmark-opts}
-                              :results rs}))
-      (let [idlen (reduce max 10 (map (comp count first) rs))
-            idf (str "%-" idlen "s")]
-        (println "\nbench results:")
-        (pp/print-table
-         (for [[k r] rs]
-           (let [v (-> r :mean first)]
-             (into
-              {:id (format idf k)
-               :time (fmt-time-value v)}
-              (for [oid oids
-                    :let [or (get oldm [oid k])]]
-                [oid (some-> or :mean first (/ v) fmt-ratio-diff)])))))
-        (println)))))
+      (println))))
 
 (def report-benchmark-hook-installed (atom false))
 
