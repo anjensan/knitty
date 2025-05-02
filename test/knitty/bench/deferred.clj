@@ -10,12 +10,34 @@
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* true)
 
+(declare print-bench-matrix)
 
 (t/use-fixtures :once
   (t/join-fixtures
    [(tu/tracing-enabled-fixture false)
     (tu/report-benchmark-fixture)
-    (tu/disable-manifold-leak-detection-fixture)]))
+    (tu/disable-manifold-leak-detection-fixture)
+    (fn [t] (t) (print-bench-matrix))]))
+
+
+(defn infer-kt-vs-md-category [test-id]
+  (let [s (set test-id)
+        kt? (s :kt)
+        md? (s :md)
+        knitty? (s :knitty)
+        manifold? (s :manifold)]
+    [(vec (remove #{:kt :md :knitty :manifold} test-id))
+     (cond
+       (and knitty? md?) :knitty-md
+       (and manifold? kt?) :manifold-kt
+       knitty? :knitty
+       manifold? :manifold)]))
+
+
+(defn print-bench-matrix []
+  (tu/print-benchmark-results-matrix
+   infer-kt-vs-md-category
+   [:knitty :manifold :knitty-md :manifold-kt]))
 
 
 (defmacro manifold-dd [x]
@@ -68,23 +90,23 @@
 
        (testing :knitty
 
-         (bench :bind-x1
+         (bench :chain-x1
                 @(with-defer (kd/bind-> create-d ninl-inc)))
-         (bench :bind-x2
+         (bench :chain-x2
                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc)))
-         (bench :bind-x3
+         (bench :chain-x3
                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc)))
-         (bench :bind-x5
+         (bench :chain-x5
                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-         (bench :bind-x10
+         (bench :chain-x10
                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))))
      )
 
    :sync  :sync       0
    :md    :realized   (manifold-dd 0)
    :md    :future     (manifold-ff 0)
-   :kd    :realized   (knitty-dd 0)
-   :kd    :future     (knitty-ff 0)
+   :kt    :realized   (knitty-dd 0)
+   :kt    :future     (knitty-ff 0)
    ))
 
 
@@ -251,27 +273,26 @@
                       x)))))))
 
    (testing :knitty
-     (testing :loop
-       (bench :loop100
-              @(tu/with-defer
-                 (kd/loop [x (ff 0)]
-                   (if (< x 1000)
-                     (kd/recur (ff (ninl-inc x)))
-                     x)))))
-     (testing :reduce
-       (bench :loop100
-              @(tu/with-defer
-                 (kd/reduce
-                  (fn [x _] (if (< x 1000) (ff (ninl-inc x)) (reduced x)))
-                  (ff 0)
-                  (range)))))
-     (testing :iterate
-       (bench :loop100
-              @(tu/with-defer
-                 (kd/iterate-while
-                  (fn [x] (ff (ninl-inc x)))
-                  (fn [x] (< x 1000))
-                  (ff 0)))))))
+     (bench :loop100
+            @(tu/with-defer
+               (kd/loop [x (ff 0)]
+                 (if (< x 1000)
+                   (kd/recur (ff (ninl-inc x)))
+                   x)))))
+   (testing :reduce
+     (bench :loop100
+            @(tu/with-defer
+               (kd/reduce
+                (fn [x _] (if (< x 1000) (ff (ninl-inc x)) (reduced x)))
+                (ff 0)
+                (range)))))
+   (testing :iterate
+     (bench :loop100
+            @(tu/with-defer
+               (kd/iterate-while
+                (fn [x] (ff (ninl-inc x)))
+                (fn [x] (< x 1000))
+                (ff 0))))))
   ;;
   )
 
@@ -291,27 +312,26 @@
 
    (testing :knitty
      (tu/with-md-executor
-       (testing :loop
-         (bench :loop100
-                @(kd/loop [x (tu/kt-future 0)]
-                   (if (< x 100)
-                     (kd/recur (tu/kt-future (ninl-inc x)))
-                     x)))))
-     (tu/with-md-executor
-       (testing :reduce
-         (bench :loop100
-                @(kd/reduce
-                  (fn [x _] (if (< x 100) (tu/kt-future (ninl-inc x)) (reduced x)))
-                  (tu/kt-future 0)
-                  (range)))))
-     (tu/with-md-executor
-       (testing :iterate
-         (bench :loop100
-                @(kd/iterate-while
-                  (fn [x] (tu/kt-future (ninl-inc x)))
-                  (fn [x] (< x 100))
-                  (tu/kt-future 0)))))))
-  )
+       (bench :loop100
+              @(kd/loop [x (tu/kt-future 0)]
+                 (if (< x 100)
+                   (kd/recur (tu/kt-future (ninl-inc x)))
+                   x)))))
+   (tu/with-md-executor
+     (testing :reduce
+       (bench :loop100
+              @(kd/reduce
+                (fn [x _] (if (< x 100) (tu/kt-future (ninl-inc x)) (reduced x)))
+                (tu/kt-future 0)
+                (range)))))
+   (tu/with-md-executor
+     (testing :iterate
+       (bench :loop100
+              @(kd/iterate-while
+                (fn [x] (tu/kt-future (ninl-inc x)))
+                (fn [x] (< x 100))
+                (tu/kt-future 0)))))))
+
 
 (deftest ^:benchmark bench-deferred
 

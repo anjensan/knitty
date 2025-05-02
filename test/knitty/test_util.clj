@@ -22,8 +22,7 @@
              (-> m :var meta :name)
              (or (some-> t/*testing-contexts* seq vec) ""))))
 
-(defmethod t/report :end-test-var [_m]
-  )
+(defmethod t/report :end-test-var [_m])
 
 (defonce -override-report-error
   (let [f (get-method t/report :error)]
@@ -105,7 +104,7 @@
 (defn current-test-id []
   (vec
    (concat
-    (reverse (map #(:name (meta %)) t/*testing-vars*))
+    (reverse (map #(-> % meta :name name) t/*testing-vars*))
     (reverse t/*testing-contexts*))))
 
 
@@ -138,11 +137,11 @@
       (.format (LocalDateTime/now) (DateTimeFormatter/ofPattern "YYMMdd-HH:mm:ss"))))
 
 
-(defn report-benchmark-results []
+
+(defn- save-benchmark-results []
   (let [testid (tests-run-id)
         rs @*bench-results*
         res-file (io/file (str bench-results-dir "/" testid ".edn"))]
-
     (io/make-parents res-file)
     (spit res-file
           (pr-str {:id testid
@@ -150,35 +149,68 @@
                    :details {:os (cc/os-details)
                              :runtime (cc/runtime-details)
                              :options benchmark-opts}
-                   :results rs}))
+                   :results rs}))))
 
-    (let [oldr (->>
-                (file-seq (io/file bench-results-dir))
-                (remove #(.isDirectory ^java.io.File %))
-                (remove #(= % res-file))
-                (map (comp read-string slurp))
-                (sort-by #(let [^java.util.Date w (:when %)] (.getTime w))))
-          oids (map :id oldr)
-          oldm (into {}
-                     (for [ors oldr
-                           r (:results ors)]
-                       [[(:id ors) (:test-id r)] r]))
-          idlen (reduce max 10 (map (comp count str :test-id) rs))
-          idf (str "%-" idlen "s")
-          ]
-      (println "\nbench results:")
-      (pp/print-table
-       (for [r rs]
-         (let [k (:test-id r)
-               v (-> r :mean first)]
-           (into
-            {:id (format idf (str/join "/" k))
-             :time (fmt-time-value v)}
-            (for [oid oids
-                  :let [or (get oldm [oid k])]]
-              [oid (some-> or :mean first (/ v) fmt-ratio-diff)])))))
 
-      (println))))
+(defn- print-benchmark-results []
+  (let [testid (tests-run-id)
+        rs @*bench-results*
+        oldr (->>
+              (file-seq (io/file bench-results-dir))
+              (remove #(.isDirectory ^java.io.File %))
+              (map (comp read-string slurp))
+              (remove #(= testid (:id %)))
+              (sort-by #(let [^java.util.Date w (:when %)] (.getTime w))))
+        oids (map :id oldr)
+        oldm (into {}
+                   (for [ors oldr
+                         r (:results ors)]
+                     [[(:id ors) (:test-id r)] r]))
+        idlen (reduce max 10 (map (comp count str :test-id) rs))
+        idf (str "%-" idlen "s")]
+    (println "\nbench results:")
+    (pp/print-table
+     (for [r rs]
+       (let [k (:test-id r)
+             v (-> r :mean first)]
+         (into
+          {:id (format idf (str/join "/" k))
+           :time (fmt-time-value v)}
+          (for [oid oids
+                :let [or (get oldm [oid k])]]
+            [oid (some-> or :mean first (/ v) fmt-ratio-diff)])))))
+
+    (println)))
+
+
+(defn report-benchmark-results []
+  (save-benchmark-results)
+  (print-benchmark-results))
+
+
+(defn print-benchmark-results-matrix [classify-test-id all-classes]
+  (let [results @*bench-results*
+        order (into {} (map vector (map :test-id results) (range)))
+        rks (group-by (comp first classify-test-id :test-id) results)
+        g (->>
+           (for [[rk rs] rks]
+             (into
+              {:id (str/join "/" rk)
+               ::order (get order (-> rs first :test-id))}
+              (for [r rs
+                    :let [t (-> r :test-id classify-test-id second)]
+                    :when t]
+                [t (-> r :mean first fmt-time-value)])))
+           (filter #(-> % keys count (> 2))))
+        idlen (reduce max 10 (map (comp count :id) g))
+        idf (str "%-" idlen "s")
+        ]
+    (pp/print-table
+     (cons :id all-classes)
+     (->> g
+          (map #(assoc % :id (format idf (:id %))))
+          (sort-by ::order)))))
+
 
 (def report-benchmark-hook-installed (atom false))
 
