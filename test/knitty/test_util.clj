@@ -91,6 +91,17 @@
     :warmup-jit-period (* cc/s-to-ns 0.05)
     :bootstrap-size 100}))
 
+
+(def warmup-benchmarks-opts
+  (merge
+   cc/*default-quick-bench-opts*
+   {:max-gc-attempts 2
+    :samples 5
+    :target-execution-time (* cc/s-to-ns 0.1)
+    :warmup-jit-period (* cc/s-to-ns 0.1)
+    :bootstrap-size 100}))
+
+
 (def benchmark-opts
   (cond
     (some? (System/getenv "knitty_qb_smoke")) smoke-benchmarks-opts
@@ -100,6 +111,9 @@
 
 (def ^:dynamic *bench-results*
   (atom []))
+
+(def ^:dynamic *capture-bench-fns*
+  nil)
 
 
 (defn current-test-id []
@@ -204,8 +218,7 @@
                 [t (-> r :mean first fmt-time-value)])))
            (filter #(-> % keys count (> 2))))
         idlen (reduce max 10 (map (comp count :id) g))
-        idf (str "%-" idlen "s")
-        ]
+        idf (str "%-" idlen "s")]
     (pp/print-table
      (cons :id all-classes)
      (->> g
@@ -227,7 +240,6 @@
 
 
 (defn eval-in-separate-jvm [ns-name code]
-  (println ">")
   (let [i (str (java.io.File/createTempFile "knitty-tests/run/" ".clj"))
         t (str (java.io.File/createTempFile "knitty-tests/ret/" ".edn"))
         cp (System/getProperty "java.class.path")
@@ -243,22 +255,26 @@
       "java" "-cp" cp "clojure.main" "-i" i)
      (proc/exit-ref)
      (deref))
-    (println "<")
     (read-string (slurp t))))
 
+(defn bench* [id expr-fn]
+  (t/testing id
+    (if-let [c *capture-bench-fns*]
+      (swap! c conj expr-fn)
+      (do
+        (print (format "  %-32s" (str/join " " (reverse t/*testing-contexts*))))
+        (flush)
+        (track-results (cc/benchmark (expr-fn) benchmark-opts))))))
 
-(defmacro bench
-  ([id expr]
-   `(t/testing ~id
-      (print (format "  %-32s" (str/join " " (reverse t/*testing-contexts*))))
-      (flush)
-      (track-results (cc/benchmark (do ~expr nil) benchmark-opts))))
-  ([id expr1 & exprs]
-   `(t/testing ~id
-      (print (format "  %-32s" (str/join " " (reverse t/*testing-contexts*))))
-      (flush)
-      (track-results (cc/benchmark-round-robin ~(mapv #(list `do %) (list* expr1 exprs))
-                                               benchmark-opts)))))
+
+(defmacro bench [id expr]
+  `(bench* ~id (fn [] ~expr nil)))
+
+
+(defn warmup-benches [bs]
+  (let [bs (vec bs)]
+    (cc/benchmark ((rand-nth bs)) benchmark-opts)))
+
 
 (defn run-bench-suite [ns-name benchs]
   (swap!
@@ -269,8 +285,12 @@
     `(binding [*bench-results* (atom [])
                t/*testing-vars* (list ~@t/*testing-vars*)
                t/*testing-contexts* (list ~@t/*testing-contexts*)]
-       ~@benchs
-       @*bench-results*))))
+       (let [a# (atom [])
+             f# (fn [] ~@benchs)]
+         (binding [*capture-bench-fns* a#] (f#))
+         (warmup-benches @a#)
+         (f#)
+         @*bench-results*)))))
 
 
 (defmacro bench-suite [& benchs]

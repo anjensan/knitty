@@ -7,8 +7,10 @@
                                     with-defer]]
    [manifold.deferred :as md]))
 
+
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* true)
+
 
 (declare print-bench-matrix)
 
@@ -40,6 +42,10 @@
    [:knitty :manifold :knitty-md :manifold-kt]))
 
 
+
+(declare dd)
+(declare ff)
+
 (defmacro manifold-dd [x]
   `(md/success-deferred ~x nil))
 
@@ -54,9 +60,6 @@
   `(doto (kd/create)
      (as-> d# (defer! (kd/success! d# ~x)))))
 
-(declare dd)
-(declare ff)
-
 (defmacro do-mode-futures [& body]
   `(tmpl/do-template
     [t# ~'dd ~'ff]
@@ -65,48 +68,48 @@
     :md manifold-dd manifold-ff))
 
 
+
 ;; ===
 
 (deftest ^:benchmark benchmark-chain
+   (do-mode-futures
 
-  (tmpl/do-template
-   [t1 t2 create-d]
-
-   (testing t1
-     (testing t2
-
-       (testing :manifold
-         (bench-suite
-          (bench :chain-x1
-                 @(with-defer (md/chain' create-d ninl-inc)))
-          (bench :chain-x2
-                 @(with-defer (md/chain' create-d ninl-inc ninl-inc)))
-          (bench :chain-x3
-                 @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc)))
-          (bench :chain-x5
-                 @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-          (bench :chain-x10
-                 @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))))
+     (testing :manifold
+       (bench-suite
+        (tmpl/do-template
+         [t create-d]
+         (testing t
+           (bench :chain-x1
+                  @(with-defer (md/chain' create-d ninl-inc)))
+           (bench :chain-x2
+                  @(with-defer (md/chain' create-d ninl-inc ninl-inc)))
+           (bench :chain-x3
+                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc)))
+           (bench :chain-x5
+                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
+           (bench :chain-x10
+                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
+           )
+         :val (dd 0)
+         :fun (ff 0))))
 
        (testing :knitty
          (bench-suite
-          (bench :chain-x1
-                 @(with-defer (kd/bind-> create-d ninl-inc)))
-          (bench :chain-x2
-                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc)))
-          (bench :chain-x3
-                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc)))
-          (bench :chain-x5
-                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-          (bench :chain-x10
-                 @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc))))))
-     )
-
-   :sync  :sync       0
-   :md    :realized   (manifold-dd 0)
-   :md    :future     (manifold-ff 0)
-   :kt    :realized   (knitty-dd 0)
-   :kt    :future     (knitty-ff 0)
+          (tmpl/do-template
+           [t create-d]
+           (testing t
+             (bench :chain-x1
+                    @(with-defer (kd/bind-> create-d ninl-inc)))
+             (bench :chain-x2
+                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc)))
+             (bench :chain-x3
+                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc)))
+             (bench :chain-x5
+                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
+             (bench :chain-x10
+                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc))))
+            :val (dd 0)
+            :fun (ff 0))))
    ))
 
 
@@ -116,12 +119,12 @@
    (testing :manifold
      (bench-suite
       (tu/with-md-executor
-        (bench :let-x3-sync
+        (bench :let-x3v
                @(md/let-flow' [x1 (dd 0)
                                x2 (ninl-inc x1)
                                x3 (dd 0)]
                               (+ x1 x2 x3)))
-        (bench :let-x5
+        (bench :let-x5f
                @(md/let-flow' [x1 (dd 0)
                                x2 (tu/md-future (ninl-inc x1))
                                x3 (tu/md-future (ninl-inc x2))
@@ -132,12 +135,12 @@
    (testing :knitty
      (bench-suite
       (tu/with-md-executor
-        (bench :let-x3-sync
+        (bench :let-x3v
                @(kd/let-bind [x1 (dd 0)
                               x2 (ninl-inc x1)
                               x3 (dd 0)]
                              (+ x1 x2 x3)))
-        (bench :let-x5
+        (bench :let-x5f
                @(kd/let-bind [x1 (dd 0)
                               x2 (tu/md-future (ninl-inc x1))
                               x3 (tu/md-future (ninl-inc x2))
@@ -147,139 +150,83 @@
   ;;
   )
 
-(deftest ^:benchmark benchmark-zip-sync
 
+(deftest ^:benchmark benchmark-zip
   (do-mode-futures
 
    (testing :manifold
      (bench-suite
-      (bench :zip-d1 @(md/zip' (dd 0)))
-      (bench :zip-d2 @(md/zip' (dd 0) (dd 1)))
-      (bench :zip-d5 @(md/zip' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
-      (bench :zip-d10 @(md/zip' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)))
-      (bench :zip-d20 @(md/zip' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)
-                                (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)))))
+      (bench :zip-1v @(md/zip' (dd 0)))
+      (bench :zip-2v @(md/zip' (dd 0) (dd 1)))
+      (bench :zip-5v @(md/zip' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
+      (bench :zip-1f @(with-defer (md/zip' (ff 0))))
+      (bench :zip-2f @(with-defer (md/zip' (ff 0) (ff 1))))
+      (bench :zip-5f @(with-defer (md/zip' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4))))))
 
    (testing :knitty
      (bench-suite
-      (bench :zip-d1 @(kd/zip (dd 0)))
-      (bench :zip-d2 @(kd/zip (dd 0) (dd 1)))
-      (bench :zip-d5 @(kd/zip (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
-      (bench :zip-d10 @(kd/zip (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)))
-      (bench :zip-d20 @(kd/zip (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)
-                               (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9))))))
-  )
-
-
-(deftest ^:benchmark benchmark-zip-vals
-
-  (testing :manifold
-    (bench-suite
-     (bench :zip-v1 @(md/zip' 0))
-     (bench :zip-v2 @(md/zip' 0 0))
-     (bench :zip-v5 @(md/zip' 0 1 2 3 4))
-     (bench :zip-v10 @(md/zip' 0 1 2 3 4 5 6 7 8 9))
-     (bench :zip-v20 @(md/zip' 0 1 2 3 4 5 6 7 8 9
-                               0 1 2 3 4 5 6 7 8 9))))
-
-  (testing :knitty
-    (bench-suite
-     (bench :zip-v1 @(kd/zip 0))
-     (bench :zip-v2 @(kd/zip 0 0))
-     (bench :zip-v5 @(kd/zip 0 1 2 3 4))
-     (bench :zip-v10 @(kd/zip 0 1 2 3 4 5 6 7 8 9))
-     (bench :zip-v20 @(kd/zip 0 1 2 3 4 5 6 7 8 9
-                              0 1 2 3 4 5 6 7 8 9))))
+      (bench :zip-1v @(kd/zip (dd 0)))
+      (bench :zip-2v @(kd/zip (dd 0) (dd 1)))
+      (bench :zip-5v @(kd/zip (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
+      (bench :zip-1f @(with-defer (kd/zip (ff 0))))
+      (bench :zip-2f @(with-defer (kd/zip (ff 0) (ff 1))))
+      (bench :zip-5f @(with-defer (kd/zip (ff 0) (ff 1) (ff 2) (ff 3) (ff 4)))))))
   ;;
   )
 
-(deftest ^:benchmark benchmark-zip-async
+
+(deftest ^:benchmark benchmark-zip-list
 
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (bench :zip-f1 @(with-defer (md/zip' (ff 0))))
-      (bench :zip-f2 @(with-defer (md/zip' (ff 0) (ff 1))))
-      (bench :zip-f5 @(with-defer (md/zip' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4))))))
+      (bench :zip-50v  (doall @(apply md/zip' (repeat 50 (dd 0)))))
+      (bench :zip-50f  (doall @(with-defer (apply md/zip' (doall (repeatedly 50 #(ff 0)))))))
+      (bench :zip-200v (doall @(apply md/zip' (repeat 200 (dd 0)))))
+      (bench :zip-200f (doall @(with-defer (apply md/zip' (doall (repeatedly 200 #(ff 0)))))))
+      ))
 
    (testing :knitty
      (bench-suite
-      (bench :zip-f1 @(with-defer (kd/zip (ff 0))))
-      (bench :zip-f2 @(with-defer (kd/zip (ff 0) (ff 1))))
-      (bench :zip-f5 @(with-defer (kd/zip (ff 0) (ff 1) (ff 2) (ff 3) (ff 4)))))))
+      (bench :zip-50v  (doall @(kd/zip* (repeat 50 (dd 0)))))
+      (bench :zip-50f  (doall @(with-defer (kd/zip* (doall (repeatedly 50 #(ff 0)))))))
+      (bench :zip-200v (doall @(kd/zip* (repeat 200 (dd 0)))))
+      (bench :zip-200f (doall @(with-defer (kd/zip* (doall (repeatedly 200 #(ff 0)))))))
+      )))
   ;;
   )
 
-(deftest ^:benchmark benchmark-zip-list-sync
+
+(deftest ^:benchmark benchmark-alt
 
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (bench :zip-50 (doall @(apply md/zip' (repeat 50 (dd 0)))))
-      (bench :zip-200 (doall @(apply md/zip' (repeat 200 (dd 0)))))))
+      (bench :alt-2v @(md/alt' (dd 0) (dd 1)))
+      (bench :alt-2f @(with-defer (md/alt' (ff 0) (ff 0))))
+      (bench :alt-3v @(md/alt' (dd 0) (dd 1) (dd 2)))
+      (bench :alt-3f @(with-defer (md/alt' (ff 0) (ff 1) (ff 2))))
+      (bench :alt-9v @(md/alt' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8)))
+      (bench :alt-9f @(with-defer (md/alt' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8)))))))
 
    (testing :knitty
      (bench-suite
-      (bench :zip-50 (doall @(kd/zip* (repeat 50 (dd 0)))))
-      (bench :zip-200 (doall @(kd/zip* (repeat 200 (dd 0))))))))
+      (bench :alt-2v @(kd/alt (dd 0) (dd 1)))
+      (bench :alt-2f @(with-defer (kd/alt (ff 0) (ff 0))))
+      (bench :alt-3v @(kd/alt (dd 0) (dd 1) (dd 2)))
+      (bench :alt-3f @(with-defer (kd/alt (ff 0) (ff 1) (ff 2))))
+      (bench :alt-9v @(kd/alt (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8)))
+      (bench :alt-9f @(with-defer (kd/alt (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8))))))
   ;;
   )
 
-(deftest ^:benchmark benchmark-zip-list-async
-
-  (do-mode-futures
-   (testing :manifold
-     (bench-suite
-      (bench :zip-50 (doall @(with-defer (apply md/zip' (doall (repeatedly 50 #(ff 0)))))))
-      (bench :zip-200 (doall @(with-defer (apply md/zip' (doall (repeatedly 200 #(ff 0)))))))))
-
-   (testing :knitty
-     (bench-suite
-      (bench :zip-50 (doall @(with-defer (kd/zip* (doall (repeatedly 50 #(ff 0)))))))
-      (bench :zip-200 (doall @(with-defer (kd/zip* (doall (repeatedly 200 #(ff 0))))))))))
-  ;;
-  )
-
-(deftest ^:benchmark benchmark-alt-sync
-
-  (do-mode-futures
-   (testing :manifold
-     (bench-suite
-      (bench :alt-2 @(md/alt' (dd 0) (dd 1)))
-      (bench :alt-3 @(md/alt' (dd 0) (dd 1) (dd 2)))
-      (bench :alt-10 @(md/alt' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9)))))
-
-   (testing :knitty
-     (bench-suite
-      (bench :alt-2 @(kd/alt (dd 0) (dd 1)))
-      (bench :alt-3 @(kd/alt (dd 0) (dd 1) (dd 2)))
-      (bench :alt-10 @(kd/alt (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8) (dd 9))))))
-  ;;
-  )
-
-(deftest ^:benchmark benchmark-alt-async
-
-  (do-mode-futures
-   (testing :manifold
-     (bench-suite
-      (bench :alt-2 @(with-defer (md/alt' (ff 0) (ff 0))))
-      (bench :alt-3 @(with-defer (md/alt' (ff 0) (ff 1) (ff 2))))
-      (bench :alt-10 @(with-defer (md/alt' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8) (ff 9))))))
-
-   (testing :knitty
-     (bench-suite
-      (bench :alt-2 @(with-defer (kd/alt (ff 0) (ff 0))))
-      (bench :alt-3 @(with-defer (kd/alt (ff 0) (ff 1) (ff 2))))
-      (bench :alt-10 @(with-defer (kd/alt (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8) (ff 9)))))))
-  ;;
-  )
 
 (deftest ^:benchmark benchmark-loop
 
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (bench :loop100
+      (bench :loop100v
              @(tu/with-defer
                 (md/loop [x (ff 0)]
                   (md/chain'
@@ -287,38 +234,9 @@
                    (fn [x]
                      (if (< x 1000)
                        (md/recur (ff (ninl-inc x)))
-                       x))))))))
-
-   (testing :knitty
-     (bench-suite
-      (bench :loop100
-             @(tu/with-defer
-                (kd/loop [x (ff 0)]
-                  (if (< x 1000)
-                    (kd/recur (ff (ninl-inc x)))
-                    x))))
-      (bench :reduce100
-             @(tu/with-defer
-                (kd/reduce
-                 (fn [x _] (if (< x 1000) (ff (ninl-inc x)) (reduced x)))
-                 (ff 0)
-                 (range))))
-      (bench :iterate100
-             @(tu/with-defer
-                (kd/iterate-while
-                 (fn [x] (ff (ninl-inc x)))
-                 (fn [x] (< x 1000))
-                 (ff 0)))))))
-  ;;
-  )
-
-(deftest ^:benchmark benchmark-loop-fut
-
-  (do-mode-futures
-   (testing :manifold
-     (bench-suite
+                       x))))))
       (tu/with-md-executor
-        (bench :loop100
+        (bench :loop100f
                @(md/loop [x (tu/md-future 0)]
                   (md/chain'
                    x
@@ -329,24 +247,21 @@
 
    (testing :knitty
      (bench-suite
+      (bench :loop100
+             @(tu/with-defer
+                (kd/loop [x (ff 0)]
+                  (if (< x 1000)
+                    (kd/recur (ff (ninl-inc x)))
+                    x))))
       (tu/with-md-executor
         (bench :loop100
                @(kd/loop [x (tu/kt-future 0)]
                   (if (< x 100)
                     (kd/recur (tu/kt-future (ninl-inc x)))
                     x))))
-      (tu/with-md-executor
-        (bench :reduce100
-               @(kd/reduce
-                 (fn [x _] (if (< x 100) (tu/kt-future (ninl-inc x)) (reduced x)))
-                 (tu/kt-future 0)
-                 (range))))
-      (tu/with-md-executor
-        (bench :iterate100
-               @(kd/iterate-while
-                 (fn [x] (tu/kt-future (ninl-inc x)))
-                 (fn [x] (< x 100))
-                 (tu/kt-future 0))))))))
+      )))
+  ;;
+  )
 
 
 (deftest ^:benchmark bench-deferred
@@ -396,6 +311,7 @@
 
    :manifold (md/deferred nil)
    :knitty (kd/create)))
+
 
 (comment
   (clojure.test/test-ns *ns*))
