@@ -54,77 +54,81 @@
 
 
 (deftest ^:benchmark sync-futures-50
-  (build-yarns-graph
-   :ids (range 50)
-   :prefix :node
-   :deps linear-sync-deps
-   :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
-  (run-benchs (nodes-range :node 50)))
+  (tu/bench-suite
+   (build-yarns-graph
+    :ids (range 50)
+    :prefix :node
+    :deps linear-sync-deps
+    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
+   (run-benchs (nodes-range :node 50))))
 
 
 (deftest ^:benchmark sync-futures-50-exp
-  (build-yarns-graph
-   :ids (range 50)
-   :prefix :node
-   :deps exp-sync-deps
-   :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
-  (run-benchs (nodes-range :node 50)))
+  (tu/bench-suite
+   (build-yarns-graph
+    :ids (range 50)
+    :prefix :node
+    :deps exp-sync-deps
+    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
+   (run-benchs (nodes-range :node 50))))
 
 
 (deftest ^:benchmark sync-futures-200
-  (build-yarns-graph
-   :ids (range 200)
-   :prefix :node
-   :deps linear-sync-deps
-   :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 20)))
-  (run-benchs (nodes-range :node 200)))
+  (tu/bench-suite
+   (build-yarns-graph
+    :ids (range 200)
+    :prefix :node
+    :deps linear-sync-deps
+    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 20)))
+   (run-benchs (nodes-range :node 200))))
 
 
 (deftest ^:benchmark g100-by-deptype
-  (doseq [[nf f] [[:syn `do]
-                  [:fut `kd/future]]]
-    (testing nf
-      (doseq [tt [:sync :defer :lazy]]
-        (build-yarns-graph
-         :ids (range 100)
-         :prefix :node
-         :deps #(map vector (repeat tt) (exp-sync-deps %))
-         :emit-body (fn [i & xs]
-                      `(~f
-                        (reduce
-                         (fn [a# x#]
-                           (kd/bind
-                            (do a#)
-                            (fn [aa#]
-                              (kd/bind
-                               (-> x# ~@(when (= :lazy tt) `[deref]))
-                               (fn [xx#] (unchecked-add aa# xx#))))))
-                         ~i
-                         [~@xs]))))
-        (bench tt (::node99 @(yank {} [::node99])))))))
+  (tu/bench-suite
+   (doseq [[nf f] [[:syn `do]
+                   [:fut `kd/future]]]
+     (testing nf
+       (doseq [tt [:sync :defer :lazy]]
+         (build-yarns-graph
+          :ids (range 100)
+          :prefix :node
+          :deps #(map vector (repeat tt) (exp-sync-deps %))
+          :emit-body (fn [i & xs]
+                       `(~f
+                         (reduce
+                          (fn [a# x#]
+                            (kd/bind
+                             (do a#)
+                             (fn [aa#]
+                               (kd/bind
+                                (-> x# ~@(when (= :lazy tt) `[deref]))
+                                (fn [xx#] (unchecked-add aa# xx#))))))
+                          ~i
+                          [~@xs]))))
+         (bench tt (::node99 @(yank {} [::node99]))))))))
 
 
 (deftest ^:benchmark sync-nofutures-200
-  (build-yarns-graph
-   :ids (range 200)
-   :prefix :node
-   :deps linear-sync-deps
-   :emit-body (fn [i & xs] `(reduce unchecked-add ~i [~@xs])))
-  (run-benchs (nodes-range :node 200)))
+  (tu/bench-suite
+   (build-yarns-graph
+    :ids (range 200)
+    :prefix :node
+    :deps linear-sync-deps
+    :emit-body (fn [i & xs] `(reduce unchecked-add ~i [~@xs])))
+   (run-benchs (nodes-range :node 200))))
 
 
 (deftest ^:stress check-big-graph
-
-  (build-yarns-graph
-   :ids (range 1000)
-   :deps (sample-sync-deps 2)
-   :fork? (constantly true)
-   :emit-body (fn [i & xs] `(tu/mfut
-                             (do
-                               (reduce unchecked-add ~i [~@xs]))
-                             10)))
-
-  (dotimes-prn 100000
-    (binding [knitty.core/*tracing* (rand-nth [false true])]
-      @(yank {} (random-sample 0.01 (nodes-range :node 0 500))))))
+  (tu/bench-suite
+   (build-yarns-graph
+    :ids (range 1000)
+    :deps (sample-sync-deps 2)
+    :fork? (constantly true)
+    :emit-body (fn [i & xs] `(tu/mfut
+                              (do
+                                (reduce unchecked-add ~i [~@xs]))
+                              10)))
+   (dotimes-prn 100000
+                (binding [knitty.core/*tracing* (rand-nth [false true])]
+                  @(yank {} (random-sample 0.01 (nodes-range :node 0 500)))))))
 

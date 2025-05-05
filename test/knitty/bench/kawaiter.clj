@@ -25,19 +25,22 @@
 ;; ===
 
 (deftest ^:benchmark benchmark-kd-kawait-sync
-  (tu/eval-template
-   (fn [a b] `(tu/bench ~a (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (dd))))
-   (for [x (range 25)] [(keyword (str "kd-await-x" x)) x])))
+  (tu/bench-suite
+   (tu/eval-template
+    (fn [a b] `(tu/bench ~a (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (dd))))
+    (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 (deftest ^:benchmark benchmark-kd-kawait-async
-  (tu/eval-template
-   (fn [a b] `(tu/bench ~a (tu/with-defer (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff)))))
-   (for [x (range 25)] [(keyword (str "kd-await-x" x)) x])))
+  (tu/bench-suite
+   (tu/eval-template
+    (fn [a b] `(tu/bench ~a (tu/with-defer (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff)))))
+    (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 (deftest ^:benchmark benchmark-kd-kawait-some-async
-  (tu/eval-template
-   (fn [a b] `(tu/bench ~a (tu/with-defer (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff) (dd) (dd)))))
-   (for [x (range 25)] [(keyword (str "kd-await-x" x)) x])))
+  (tu/bench-suite
+   (tu/eval-template
+    (fn [a b] `(tu/bench ~a (tu/with-defer (replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff) (dd) (dd)))))
+    (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 
 (comment

@@ -1,9 +1,10 @@
 (ns knitty.bench.vs-bench
-  (:require [clojure.test :as t :refer [deftest]]
-            [knitty.core :as kt :refer [defyarn yank yank1 yarn]]
-            [knitty.test-util :as tu :refer [bench]]
-            [plumbing.core :as pc]
-            [plumbing.graph :as pg]))
+  (:require
+   [clojure.test :as t :refer [deftest testing]]
+   [knitty.core :as kt :refer [defyarn yank yank1 yarn]]
+   [knitty.test-util :as tu :refer [bench]]
+   [plumbing.core :as pc]
+   [plumbing.graph :as pg]))
 
 
 (t/use-fixtures :once
@@ -94,50 +95,36 @@
 
 ;; bench
 
-(defn testem [x]
-  (kt/set-executor! nil)
-  (kt/enable-tracing! false)
-  (bench :stats-fn    (stats-fn x))
-  (bench :stats-pg    (stats-pg x))
-  (bench :stats-kt    (stats-kt x))
-  (bench :stats-kt1   (stats-kt1 x))
-  (bench :stats-mm    (stats-mm x)))
+(deftest ^:benchmark stats-simple
+  (testing :simple
+    (tu/bench-suite
+     (bench :list1 (stats-fn [1]))
+     (bench :list5 (stats-fn [1 2 3 5 7])))))
 
+(deftest ^:benchmark stats-naive
+  (testing :naive
+    (tu/bench-suite
+     (bench :list1 (stats-mm [1]))
+     (bench :list5 (stats-mm [1 2 3 5 7])))))
 
-(deftest ^:benchmark singletone-list
-  (testem [1]))
+(deftest ^:benchmark stats-pl-graph
+  (testing :pl-graph
+    (tu/bench-suite
+     (bench :list1 (stats-pg [1]))
+     (bench :list5 (stats-pg [1 2 3 5 7])))))
 
-(deftest ^:benchmark short-list
-  (testem [1 2 3 6]))
+(deftest ^:benchmark stats-knitty
+  (testing :knitty
+    (tu/bench-suite
+     (kt/set-executor! nil)
+     (kt/enable-tracing! false)
+     (bench :list1 (stats-kt [1]))
+     (bench :list5 (stats-kt [1 2 3 5 7])))))
 
-(deftest ^:benchmark long-list
-  (testem (vec (range 100))))
-
-
-(comment
-
-  (require '[clj-async-profiler.core :as prof])
-
-  (kt/set-executor! nil)
-  (kt/enable-tracing! false)
-  (prof/serve-ui 8888)
-
-  (testem [1 2 3 4 5])
-
-  (binding [kt/*executor* nil
-            kt/*tracing* false]
-    (dotimes [_ 1000000]
-      (let [x (vec (take (inc (rand-int 10))
-                         (repeatedly #(rand-int 100))))]
-        (stats-mm x)
-        (stats-kt1 x))))
-
-  (do
-    (dotimes [_ 10000000]
-      (stats-kt [3]))
-
-    (prof/profile
-     (dotimes [_ 30000000]
-       (stats-kt [3]))))
-
-  )
+(deftest ^:benchmark stats-knitty1
+  (testing :knitty1
+    (tu/bench-suite
+     (kt/set-executor! nil)
+     (kt/enable-tracing! false)
+     (bench :list1 (stats-kt1 [1]))
+     (bench :list5 (stats-kt1 [1 2 3 5 7])))))

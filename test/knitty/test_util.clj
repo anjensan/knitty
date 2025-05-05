@@ -1,6 +1,7 @@
 (ns knitty.test-util
   (:require
    [clojure.java.io :as io]
+   [clojure.java.process :as proc]
    [clojure.math :as math]
    [clojure.pprint :as pp]
    [clojure.string :as str]
@@ -224,6 +225,28 @@
     (add-report-benchmark-results-hook)
     (t)))
 
+
+(defn eval-in-separate-jvm [ns-name code]
+  (println ">")
+  (let [i (str (java.io.File/createTempFile "knitty-tests/run/" ".clj"))
+        t (str (java.io.File/createTempFile "knitty-tests/ret/" ".edn"))
+        cp (System/getProperty "java.class.path")
+        e (pr-str `(do
+                     (require '~ns-name)
+                     (in-ns '~ns-name)
+                     (let [v# ~code]
+                       (spit ~t (pr-str v#)))))]
+    (spit i e)
+    (->
+     (proc/start
+      {:in :inherit, :out :inherit, :err :inherit}
+      "java" "-cp" cp "clojure.main" "-i" i)
+     (proc/exit-ref)
+     (deref))
+    (println "<")
+    (read-string (slurp t))))
+
+
 (defmacro bench
   ([id expr]
    `(t/testing ~id
@@ -236,6 +259,23 @@
       (flush)
       (track-results (cc/benchmark-round-robin ~(mapv #(list `do %) (list* expr1 exprs))
                                                benchmark-opts)))))
+
+(defn run-bench-suite [ns-name benchs]
+  (swap!
+   *bench-results*
+   into
+   (eval-in-separate-jvm
+    ns-name
+    `(binding [*bench-results* (atom [])
+               t/*testing-vars* (list ~@t/*testing-vars*)
+               t/*testing-contexts* (list ~@t/*testing-contexts*)]
+       ~@benchs
+       @*bench-results*))))
+
+
+(defmacro bench-suite [& benchs]
+  `(run-bench-suite '~(ns-name *ns*) '~benchs))
+
 
 (defmacro do-defs
   "eval forms one by one - allows to intermix defs"
@@ -349,3 +389,5 @@
                 (and (vector? xn) (== 1 (count xn))) ['_ (first xn)]
                 :else ['_ xn])]
     `(dotimes-prn* ~n (fn [~x] ~@body))))
+
+
