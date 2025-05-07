@@ -192,7 +192,10 @@
 
 
 (defmacro defyarn
-  "Defines a Yarn - a computation node. Uses the current `*ns*` to build a qualified keyword as the Yarn ID.
+  "Defines a Yarn, which is a computation node in Knitty. The Yarn is identified by a qualified keyword
+   generated using the current namespace and the provided name. This macro allows you to define Yarns
+   with optional dependencies and computation logic.
+
    Examples:
 
    ```clojure
@@ -362,7 +365,7 @@
 
 
 (defn yank-error?
-  "Returns true when exception is rethrown by `yank`."
+  "Checks if an exception was rethrown by a `yank` function."
   [ex]
   (:knitty/yank-error? (ex-data ex) false))
 

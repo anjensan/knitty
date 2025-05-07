@@ -472,6 +472,8 @@
 ;; ==
 
 (defmacro call-after-all-arr'
+  "Schedules an expression `f` to be called after all deferreds in the array `ds-arr` are realized.
+   Returns a deferred that resolves to the result of `f`."
   [ds-arr f]
   `(let [d# (create)
          a# ~ds-arr]
@@ -587,6 +589,8 @@
 ;; ==
 
 (defmacro impl-iterate-while*
+  "Internal macro for implementing iterative loops with deferreds.
+   Executes a step expression `f` while a predicate `p` holds true."
   ([init f p]
    `(impl-iterate-while* ~init ~f ~p (fn [x#] x#)))
   ([init
@@ -613,11 +617,10 @@
       d#)))
 
 (defn iterate-while
-  "Iteratively run 1-arg function `f` with initial value `x`.
-   After each call check result of calling `p` and stop loop when result if falsy.
-   Function `f` may return deferreds, initial value `x` also may be deferred.
-   Predicate `p` should always return synchonous values howerver.
-   This is low-level routine, prefer `reduce` `while` or `loop`."
+  "Iteratively runs a step function `stepf` with an initial value `init`.
+   After each step, checks the result of calling the predicate `somef`.
+   Stops the loop when the predicate returns a falsy value.
+   Both the step function and the initial value can be deferreds."
   ^KDeferred [stepf somef init]
   (impl-iterate-while* init
                        (fn [x] (stepf x))
@@ -738,6 +741,8 @@
     (.setStackTrace (make-array StackTraceElement 0))))
 
 (defn timeout
+  "Adds a timeout to a deferred. If the deferred is not realized within the specified delay,
+   it will be realized with a timeout exception or a provided timeout value."
   ([d ^double delay]
    (cond
      (or (nil? delay) (not (deferred? d)) (realized? d)) d
