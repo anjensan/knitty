@@ -1,10 +1,12 @@
 (ns knitty.bench.deferred
   (:require
    [clojure.template :as tmpl]
-   [clojure.test :as t :refer [deftest testing]]
+   [clojure.test :as t :refer [deftest is testing]]
+   [knitty.bench.bench-util :as bu :refer [apply-replicate-arg bench
+                                           bench-suite defer! ninl-inc
+                                           with-defer]]
    [knitty.deferred :as kd]
-   [knitty.test-util :as tu :refer [bench bench-suite defer! ninl-inc
-                                    with-defer]]
+   [knitty.test-util :as tu]
    [manifold.deferred :as md]))
 
 
@@ -17,7 +19,7 @@
 (t/use-fixtures :once
   (t/join-fixtures
    [(tu/tracing-enabled-fixture false)
-    (tu/report-benchmark-fixture)
+    (bu/report-benchmark-fixture)
     (tu/disable-manifold-leak-detection-fixture)
     (fn [t] (t) (print-bench-matrix))]))
 
@@ -37,7 +39,7 @@
 
 
 (defn print-bench-matrix []
-  (tu/print-benchmark-results-matrix
+  (bu/print-benchmark-results-matrix
    infer-kt-vs-md-category
    [:knitty :manifold :knitty-md :manifold-kt]))
 
@@ -68,7 +70,6 @@
     :md manifold-dd manifold-ff))
 
 
-
 ;; ===
 
 (deftest ^:benchmark benchmark-chain
@@ -79,37 +80,29 @@
         (tmpl/do-template
          [t create-d]
          (testing t
-           (bench :chain-x1
-                  @(with-defer (md/chain' create-d ninl-inc)))
-           (bench :chain-x2
-                  @(with-defer (md/chain' create-d ninl-inc ninl-inc)))
-           (bench :chain-x3
-                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc)))
-           (bench :chain-x5
-                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-           (bench :chain-x10
-                  @(with-defer (md/chain' create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-           )
+           (bench :chain-x1  @(with-defer (apply-replicate-arg (md/chain' create-d) 1 ninl-inc)))
+           (bench :chain-x2  @(with-defer (apply-replicate-arg (md/chain' create-d) 2 ninl-inc)))
+           (bench :chain-x3  @(with-defer (apply-replicate-arg (md/chain' create-d) 3 ninl-inc)))
+           (bench :chain-x5  @(with-defer (apply-replicate-arg (md/chain' create-d) 5 ninl-inc)))
+           (bench :chain-x10 @(with-defer (apply-replicate-arg (md/chain' create-d) 10 ninl-inc)))
+           (bench :chain-x25 @(with-defer (apply-replicate-arg (md/chain' create-d) 25 ninl-inc))))
          :val (dd 0)
-         :fun (ff 0))))
+         :fut (ff 0))))
 
        (testing :knitty
          (bench-suite
           (tmpl/do-template
            [t create-d]
            (testing t
-             (bench :chain-x1
-                    @(with-defer (kd/bind-> create-d ninl-inc)))
-             (bench :chain-x2
-                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc)))
-             (bench :chain-x3
-                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc)))
-             (bench :chain-x5
-                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc)))
-             (bench :chain-x10
-                    @(with-defer (kd/bind-> create-d ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc ninl-inc))))
+             (bench :chain-x1  @(with-defer (apply-replicate-arg (kd/bind-> create-d) 1 ninl-inc)))
+             (bench :chain-x2  @(with-defer (apply-replicate-arg (kd/bind-> create-d) 2 ninl-inc)))
+             (bench :chain-x3  @(with-defer (apply-replicate-arg (kd/bind-> create-d) 3 ninl-inc)))
+             (bench :chain-x5  @(with-defer (apply-replicate-arg (kd/bind-> create-d) 5 ninl-inc)))
+             (bench :chain-x10 @(with-defer (apply-replicate-arg (kd/bind-> create-d) 10 ninl-inc)))
+             (bench :chain-x25 @(with-defer (apply-replicate-arg (kd/bind-> create-d) 25 ninl-inc)))
+             )
             :val (dd 0)
-            :fun (ff 0))))
+            :fut (ff 0))))
    ))
 
 
@@ -118,7 +111,7 @@
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (tu/with-md-executor
+      (bu/with-md-executor
         (bench :let-x3v
                @(md/let-flow' [x1 (dd 0)
                                x2 (ninl-inc x1)
@@ -126,15 +119,15 @@
                               (+ x1 x2 x3)))
         (bench :let-x5f
                @(md/let-flow' [x1 (dd 0)
-                               x2 (tu/md-future (ninl-inc x1))
-                               x3 (tu/md-future (ninl-inc x2))
-                               x4 (tu/md-future (ninl-inc x3))
+                               x2 (bu/md-future (ninl-inc x1))
+                               x3 (bu/md-future (ninl-inc x2))
+                               x4 (bu/md-future (ninl-inc x3))
                                x5 (ninl-inc x4)]
                               x5)))))
 
    (testing :knitty
      (bench-suite
-      (tu/with-md-executor
+      (bu/with-md-executor
         (bench :let-x3v
                @(kd/let-bind [x1 (dd 0)
                               x2 (ninl-inc x1)
@@ -142,9 +135,9 @@
                              (+ x1 x2 x3)))
         (bench :let-x5f
                @(kd/let-bind [x1 (dd 0)
-                              x2 (tu/md-future (ninl-inc x1))
-                              x3 (tu/md-future (ninl-inc x2))
-                              x4 (tu/md-future (ninl-inc x3))
+                              x2 (bu/md-future (ninl-inc x1))
+                              x3 (bu/md-future (ninl-inc x2))
+                              x4 (bu/md-future (ninl-inc x3))
                               x5 (ninl-inc x4)]
                              x5))))))
   ;;
@@ -156,21 +149,27 @@
 
    (testing :manifold
      (bench-suite
-      (bench :zip-1v @(md/zip' (dd 0)))
-      (bench :zip-2v @(md/zip' (dd 0) (dd 1)))
-      (bench :zip-5v @(md/zip' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
-      (bench :zip-1f @(with-defer (md/zip' (ff 0))))
-      (bench :zip-2f @(with-defer (md/zip' (ff 0) (ff 1))))
-      (bench :zip-5f @(with-defer (md/zip' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4))))))
+      (bench :zip-2v  @(apply-replicate-arg md/zip' 2 (dd 0)))
+      (bench :zip-5v  @(apply-replicate-arg md/zip' 5 (dd 0)))
+      (bench :zip-10v @(apply-replicate-arg md/zip' 10 (dd 0)))
+      (bench :zip-25v @(apply-replicate-arg md/zip' 25 (dd 0)))
+      (bench :zip-2f  @(with-defer (apply-replicate-arg md/zip' 2 (ff 0))))
+      (bench :zip-5f  @(with-defer (apply-replicate-arg md/zip' 5 (ff 0))))
+      (bench :zip-10f @(with-defer (apply-replicate-arg md/zip' 10 (ff 0))))
+      (bench :zip-25f @(with-defer (apply-replicate-arg md/zip' 25 (ff 0))))
+      ))
 
    (testing :knitty
      (bench-suite
-      (bench :zip-1v @(kd/zip (dd 0)))
-      (bench :zip-2v @(kd/zip (dd 0) (dd 1)))
-      (bench :zip-5v @(kd/zip (dd 0) (dd 1) (dd 2) (dd 3) (dd 4)))
-      (bench :zip-1f @(with-defer (kd/zip (ff 0))))
-      (bench :zip-2f @(with-defer (kd/zip (ff 0) (ff 1))))
-      (bench :zip-5f @(with-defer (kd/zip (ff 0) (ff 1) (ff 2) (ff 3) (ff 4)))))))
+      (bench :zip-2v  @(apply-replicate-arg kd/zip 2 (dd 0)))
+      (bench :zip-5v  @(apply-replicate-arg kd/zip 5 (dd 0)))
+      (bench :zip-10v @(apply-replicate-arg kd/zip 10 (dd 0)))
+      (bench :zip-20v @(apply-replicate-arg kd/zip 20 (dd 0)))
+      (bench :zip-2f  @(with-defer (apply-replicate-arg kd/zip 2 (ff 0))))
+      (bench :zip-5f  @(with-defer (apply-replicate-arg kd/zip 5 (ff 0))))
+      (bench :zip-10f @(with-defer (apply-replicate-arg kd/zip 10 (ff 0))))
+      (bench :zip-25f @(with-defer (apply-replicate-arg kd/zip 25 (ff 0))))
+      )))
   ;;
   )
 
@@ -181,18 +180,16 @@
    (testing :manifold
      (bench-suite
       (bench :zip-50v  (doall @(apply md/zip' (repeat 50 (dd 0)))))
-      (bench :zip-50f  (doall @(with-defer (apply md/zip' (doall (repeatedly 50 #(ff 0)))))))
       (bench :zip-200v (doall @(apply md/zip' (repeat 200 (dd 0)))))
-      (bench :zip-200f (doall @(with-defer (apply md/zip' (doall (repeatedly 200 #(ff 0)))))))
-      ))
+      (bench :zip-50f  (doall @(with-defer (apply md/zip' (doall (repeatedly 50 #(ff 0)))))))
+      (bench :zip-200f (doall @(with-defer (apply md/zip' (doall (repeatedly 200 #(ff 0)))))))))
 
    (testing :knitty
      (bench-suite
       (bench :zip-50v  (doall @(kd/zip* (repeat 50 (dd 0)))))
-      (bench :zip-50f  (doall @(with-defer (kd/zip* (doall (repeatedly 50 #(ff 0)))))))
       (bench :zip-200v (doall @(kd/zip* (repeat 200 (dd 0)))))
-      (bench :zip-200f (doall @(with-defer (kd/zip* (doall (repeatedly 200 #(ff 0)))))))
-      )))
+      (bench :zip-50f  (doall @(with-defer (kd/zip* (doall (repeatedly 50 #(ff 0)))))))
+      (bench :zip-200f (doall @(with-defer (kd/zip* (doall (repeatedly 200 #(ff 0))))))))))
   ;;
   )
 
@@ -202,21 +199,23 @@
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (bench :alt-2v @(md/alt' (dd 0) (dd 1)))
-      (bench :alt-2f @(with-defer (md/alt' (ff 0) (ff 0))))
-      (bench :alt-3v @(md/alt' (dd 0) (dd 1) (dd 2)))
-      (bench :alt-3f @(with-defer (md/alt' (ff 0) (ff 1) (ff 2))))
-      (bench :alt-9v @(md/alt' (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8)))
-      (bench :alt-9f @(with-defer (md/alt' (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8)))))))
+      (bench :alt-2v  @(apply-replicate-arg md/alt' 2 (dd 0)))
+      (bench :alt-3v  @(apply-replicate-arg md/alt' 3 (dd 0)))
+      (bench :alt-10v @(apply-replicate-arg md/alt' 10 (dd 0)))
+      (bench :alt-2f  @(with-defer (apply-replicate-arg md/alt' 2 (ff 0))))
+      (bench :alt-3f  @(with-defer (apply-replicate-arg md/alt' 3 (ff 0))))
+      (bench :alt-10f @(with-defer (apply-replicate-arg md/alt' 10 (ff 0))))
+      ))
 
    (testing :knitty
      (bench-suite
-      (bench :alt-2v @(kd/alt (dd 0) (dd 1)))
-      (bench :alt-2f @(with-defer (kd/alt (ff 0) (ff 0))))
-      (bench :alt-3v @(kd/alt (dd 0) (dd 1) (dd 2)))
-      (bench :alt-3f @(with-defer (kd/alt (ff 0) (ff 1) (ff 2))))
-      (bench :alt-9v @(kd/alt (dd 0) (dd 1) (dd 2) (dd 3) (dd 4) (dd 5) (dd 6) (dd 7) (dd 8)))
-      (bench :alt-9f @(with-defer (kd/alt (ff 0) (ff 1) (ff 2) (ff 3) (ff 4) (ff 5) (ff 6) (ff 7) (ff 8))))))
+      (bench :alt-2v  @(apply-replicate-arg kd/alt 2 (dd 0)))
+      (bench :alt-3v  @(apply-replicate-arg kd/alt 3 (dd 0)))
+      (bench :alt-10v @(apply-replicate-arg kd/alt 10 (dd 0)))
+      (bench :alt-2f  @(with-defer (apply-replicate-arg kd/alt 2 (ff 0))))
+      (bench :alt-3f  @(with-defer (apply-replicate-arg kd/alt 3 (ff 0))))
+      (bench :alt-10f @(with-defer (apply-replicate-arg kd/alt 10 (ff 0))))
+      )))
   ;;
   )
 
@@ -227,7 +226,7 @@
    (testing :manifold
      (bench-suite
       (bench :loop100v
-             @(tu/with-defer
+             @(bu/with-defer
                 (md/loop [x (ff 0)]
                   (md/chain'
                    x
@@ -235,29 +234,29 @@
                      (if (< x 1000)
                        (md/recur (ff (ninl-inc x)))
                        x))))))
-      (tu/with-md-executor
+      (bu/with-md-executor
         (bench :loop100f
-               @(md/loop [x (tu/md-future 0)]
+               @(md/loop [x (bu/md-future 0)]
                   (md/chain'
                    x
                    (fn [x]
                      (if (< x 100)
-                       (md/recur (tu/md-future (ninl-inc x)))
+                       (md/recur (bu/md-future (ninl-inc x)))
                        x))))))))
 
    (testing :knitty
      (bench-suite
       (bench :loop100
-             @(tu/with-defer
+             @(bu/with-defer
                 (kd/loop [x (ff 0)]
                   (if (< x 1000)
                     (kd/recur (ff (ninl-inc x)))
                     x))))
-      (tu/with-md-executor
+      (bu/with-md-executor
         (bench :loop100
-               @(kd/loop [x (tu/kt-future 0)]
+               @(kd/loop [x (bu/kt-future 0)]
                   (if (< x 100)
-                    (kd/recur (tu/kt-future (ninl-inc x)))
+                    (kd/recur (bu/kt-future (ninl-inc x)))
                     x))))
       )))
   ;;

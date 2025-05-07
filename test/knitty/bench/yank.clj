@@ -1,10 +1,10 @@
 (ns knitty.bench.yank
   (:require
    [clojure.test :as t :refer [deftest testing]]
-   [knitty.core :refer [yank yank1 yank*]]
+   [knitty.bench.bench-util :as bu :refer [bench bench-suite]]
+   [knitty.core :refer [yank yank* yank1]]
    [knitty.deferred :as kd]
-   [knitty.test-util :as tu :refer [bench build-yarns-graph dotimes-prn
-                                    nodes-range]]))
+   [knitty.test-util :as tu]))
 
 
 (set! *warn-on-reflection* true)
@@ -13,7 +13,43 @@
 (t/use-fixtures :once
   (t/join-fixtures
    [(tu/tracing-enabled-fixture false)
-    (tu/report-benchmark-fixture)]))
+    (bu/report-benchmark-fixture)]))
+
+
+(defn compile-yarn-graph*
+  [ns prefix ids deps-fn emit-body-fn fork?]
+  (let [n (create-ns ns)]
+    (binding [*ns* n]
+      (mapv var-get
+            (for [i ids]
+              (eval
+               (let [nsym #(if (vector? %)
+                             (let [[t i] %]
+                               (with-meta
+                                 (symbol (str prefix i))
+                                 {t true}))
+                             (symbol (str prefix %)))
+                     node-xxxx (cond-> (nsym i)
+                                 (fork? i) (vary-meta assoc :fork true))
+                     deps (map nsym (deps-fn i))]
+                 `(defyarn ~node-xxxx
+                    ~(zipmap deps (map (fn [s] (keyword (name ns) (name s))) deps))
+                    ~(apply emit-body-fn i deps)))))))))
+
+
+(defmacro build-yarns-graph
+  [& {:keys [prefix ids deps emit-body fork?]
+      :or {prefix "node"
+           emit-body (fn [i & _] i)
+           fork? `(constantly false)}}]
+  (let [g (ns-name *ns*)]
+    `(compile-yarn-graph* '~g (name ~prefix) ~ids ~deps ~emit-body ~fork?)))
+
+
+(defmacro nodes-range
+  ([prefix & range-args]
+   (mapv #(keyword (name (ns-name *ns*)) (str (name prefix) %))
+         (apply range range-args))))
 
 
 (defn linear-sync-deps [c]
@@ -54,7 +90,7 @@
 
 
 (deftest ^:benchmark sync-futures-50
-  (tu/bench-suite
+  (bench-suite
    (build-yarns-graph
     :ids (range 50)
     :prefix :node
@@ -64,7 +100,7 @@
 
 
 (deftest ^:benchmark sync-futures-50-exp
-  (tu/bench-suite
+  (bench-suite
    (build-yarns-graph
     :ids (range 50)
     :prefix :node
@@ -74,7 +110,7 @@
 
 
 (deftest ^:benchmark sync-futures-200
-  (tu/bench-suite
+  (bench-suite
    (build-yarns-graph
     :ids (range 200)
     :prefix :node
@@ -84,7 +120,7 @@
 
 
 (deftest ^:benchmark g100-by-deptype
-  (tu/bench-suite
+  (bench-suite
    (doseq [[nf f] [[:syn `do]
                    [:fut `kd/future]]]
      (testing nf
@@ -109,7 +145,7 @@
 
 
 (deftest ^:benchmark sync-nofutures-200
-  (tu/bench-suite
+  (bench-suite
    (build-yarns-graph
     :ids (range 200)
     :prefix :node
@@ -119,7 +155,7 @@
 
 
 (deftest ^:stress check-big-graph
-  (tu/bench-suite
+  (bench-suite
    (build-yarns-graph
     :ids (range 1000)
     :deps (sample-sync-deps 2)
@@ -128,7 +164,8 @@
                               (do
                                 (reduce unchecked-add ~i [~@xs]))
                               10)))
-   (dotimes-prn 100000
-                (binding [knitty.core/*tracing* (rand-nth [false true])]
-                  @(yank {} (random-sample 0.01 (nodes-range :node 0 500)))))))
+   (tu/dotimes-prn
+    100000
+    (binding [knitty.core/*tracing* (rand-nth [false true])]
+      @(yank {} (random-sample 0.01 (nodes-range :node 0 500)))))))
 

@@ -1,15 +1,15 @@
 (ns knitty.bench.vs-bench
   (:require
    [clojure.test :as t :refer [deftest testing]]
+   [knitty.bench.bench-util :as bu :refer [bench bench-suite]]
    [knitty.core :as kt :refer [defyarn yank yank1 yarn]]
-   [knitty.test-util :as tu :refer [bench]]
    [plumbing.core :as pc]
    [plumbing.graph :as pg]))
 
 
 (t/use-fixtures :once
   (t/join-fixtures
-   [(tu/report-benchmark-fixture)]))
+   [(bu/report-benchmark-fixture)]))
 
 
 ;; plain Fn
@@ -97,25 +97,25 @@
 
 (deftest ^:benchmark stats-simple
   (testing :simple
-    (tu/bench-suite
+    (bench-suite
      (bench :list1 (stats-fn [1]))
      (bench :list5 (stats-fn [1 2 3 5 7])))))
 
 (deftest ^:benchmark stats-naive
   (testing :naive
-    (tu/bench-suite
+    (bench-suite
      (bench :list1 (stats-mm [1]))
      (bench :list5 (stats-mm [1 2 3 5 7])))))
 
 (deftest ^:benchmark stats-pl-graph
   (testing :pl-graph
-    (tu/bench-suite
+    (bench-suite
      (bench :list1 (stats-pg [1]))
      (bench :list5 (stats-pg [1 2 3 5 7])))))
 
 (deftest ^:benchmark stats-knitty
   (testing :knitty
-    (tu/bench-suite
+    (bench-suite
      (kt/set-executor! nil)
      (kt/enable-tracing! false)
      (bench :list1 (stats-kt [1]))
@@ -123,7 +123,7 @@
 
 (deftest ^:benchmark stats-knitty1
   (testing :knitty1
-    (tu/bench-suite
+    (bench-suite
      (kt/set-executor! nil)
      (kt/enable-tracing! false)
      (bench :list1 (stats-kt1 [1]))
