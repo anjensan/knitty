@@ -97,6 +97,7 @@ public final class KDeferred
     private final static class ErrBoxLeakable extends ErrBox implements Runnable {
 
         private static final BlockingQueue<Object> ELD_LEAKED_ERRORS = new ArrayBlockingQueue<>(256);
+        private static final long MAX_ELD_QUEUE_SIZE = 10000000;
 
         @SuppressWarnings("CallToPrintStackTrace")
         public static final Thread ELD_LOGGER = new Thread(() -> {
@@ -135,6 +136,7 @@ public final class KDeferred
         }
 
         private final Object err;
+        private Cleaner.Cleanable refClean;
         private volatile boolean _consumed;
 
         ErrBoxLeakable(Object err) {
@@ -145,7 +147,6 @@ public final class KDeferred
         public void run() {
             Object e = this.err;
             if (!isConsumed()) {
-                this.getError();
                 ELD_LEAKED_ERRORS.offer(e);
             }
         }
@@ -153,6 +154,11 @@ public final class KDeferred
         @Override
         public Object getError() {
             CONSUMED.setOpaque(this, true);
+            Cleaner.Cleanable c = this.refClean;
+            if (c != null) {
+                this.refClean = null;
+                c.clean();
+            }
             return this.err;
         }
 
@@ -161,14 +167,9 @@ public final class KDeferred
         }
 
         @Override
-        public Object raise() {
-            return Util.sneakyThrow(coerceError(this.getError()));
-        }
-
-        @Override
         public void detectLeakedError(KDeferred d) {
             if (!this.isConsumed()) {
-                ELD_CLEANER.register(d, this);
+                this.refClean = ELD_CLEANER.register(d, this);
             }
         }
     }
@@ -1003,7 +1004,7 @@ public final class KDeferred
         return ((Boolean) this.success(x)) ? this : null;
     }
 
-    private static Object unwrapValue(Object v) {
+    private Object unwrapValue(Object v) {
         return (v instanceof ErrBox) ? ((ErrBox) v).raise() : v;
     }
 
@@ -1184,9 +1185,9 @@ public final class KDeferred
         KDeferred d = new KDeferred();
         LHEAD.setOpaque(d, LS_TOMB);
         VALUE.setRelease(d, eb);
-        eb.detectLeakedError(d);
         VarHandle.storeStoreFence();
         d.weakState = STATE_ERRR;
+        eb.detectLeakedError(d);
         return d;
     }
 
