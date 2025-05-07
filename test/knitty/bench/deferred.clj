@@ -106,6 +106,35 @@
    ))
 
 
+(deftest ^:benchmark benchmark-chain-err
+  (do-mode-futures
+
+   #_{:clj-kondo/ignore [:invalid-arity]}
+   (tmpl/do-template
+    [t1 t2 d bind bind-err]
+    (testing t1
+      (bench-suite
+       (testing t2
+         (let [e (ArithmeticException. "err")]
+           (bench :chain-err1 @(with-defer
+                                 (-> d
+                                     (bind (fn [_] (throw e)))
+                                     (bind-err (fn [_] :ok)))))
+           (bench :chain-err5 @(with-defer
+                                 (-> d
+                                     (bind (fn [_] (throw e)))
+                                     (bind-err ClassCastException    (fn [_] :no))
+                                     (bind-err NullPointerException  (fn [_] :no))
+                                     (bind-err IllegalStateException (fn [_] :no))
+                                     (bind-err ArithmeticException   (fn [_] :ok))
+                                     (bind-err (fn [_] :no)))))))))
+
+    :manifold :val (dd 0) md/chain' md/catch'
+    :manifold :fut (ff 0) md/chain' md/catch'
+    :knitty   :val (dd 0) kd/bind   kd/bind-err
+    :knitty   :fut (ff 0) kd/bind   kd/bind-err)))
+
+
 (deftest ^:benchmark benchmark-let
 
   (do-mode-futures
