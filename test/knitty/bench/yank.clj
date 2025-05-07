@@ -2,9 +2,10 @@
   (:require
    [clojure.test :as t :refer [deftest testing]]
    [knitty.bench.bench-util :as bu :refer [bench bench-suite]]
-   [knitty.core :refer [yank yank* yank1]]
+   [knitty.core :as kt :refer [yank yank* yank1]]
    [knitty.deferred :as kd]
-   [knitty.test-util :as tu]))
+   [knitty.test-util :as tu]
+   [manifold.deferred :as md]))
 
 
 (set! *warn-on-reflection* true)
@@ -14,6 +15,10 @@
   (t/join-fixtures
    [(tu/tracing-enabled-fixture false)
     (bu/report-benchmark-fixture)]))
+
+
+(defn mfut [x y]
+    (if (zero? (mod x y)) (md/future x) x))
 
 
 (defn compile-yarn-graph*
@@ -32,7 +37,7 @@
                      node-xxxx (cond-> (nsym i)
                                  (fork? i) (vary-meta assoc :fork true))
                      deps (map nsym (deps-fn i))]
-                 `(defyarn ~node-xxxx
+                 `(kt/defyarn ~node-xxxx
                     ~(zipmap deps (map (fn [s] (keyword (name ns) (name s))) deps))
                     ~(apply emit-body-fn i deps)))))))))
 
@@ -95,7 +100,7 @@
     :ids (range 50)
     :prefix :node
     :deps linear-sync-deps
-    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
+    :emit-body (fn [i & xs] `(mfut (reduce unchecked-add ~i [~@xs]) 3)))
    (run-benchs (nodes-range :node 50))))
 
 
@@ -105,7 +110,7 @@
     :ids (range 50)
     :prefix :node
     :deps exp-sync-deps
-    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 3)))
+    :emit-body (fn [i & xs] `(mfut (reduce unchecked-add ~i [~@xs]) 3)))
    (run-benchs (nodes-range :node 50))))
 
 
@@ -115,7 +120,7 @@
     :ids (range 200)
     :prefix :node
     :deps linear-sync-deps
-    :emit-body (fn [i & xs] `(tu/mfut (reduce unchecked-add ~i [~@xs]) 20)))
+    :emit-body (fn [i & xs] `(mfut (reduce unchecked-add ~i [~@xs]) 20)))
    (run-benchs (nodes-range :node 200))))
 
 
@@ -155,17 +160,16 @@
 
 
 (deftest ^:stress check-big-graph
-  (bench-suite
    (build-yarns-graph
     :ids (range 1000)
     :deps (sample-sync-deps 2)
     :fork? (constantly true)
-    :emit-body (fn [i & xs] `(tu/mfut
+    :emit-body (fn [i & xs] `(mfut
                               (do
                                 (reduce unchecked-add ~i [~@xs]))
                               10)))
    (tu/dotimes-prn
     100000
     (binding [knitty.core/*tracing* (rand-nth [false true])]
-      @(yank {} (random-sample 0.01 (nodes-range :node 0 500)))))))
+      @(yank {} (random-sample 0.01 (nodes-range :node 0 500))))))
 
