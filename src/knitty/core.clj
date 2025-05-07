@@ -12,7 +12,7 @@
   false)
 
 (defn enable-tracing!
-  "Globally enable knitty tracing."
+  "Globally enables Knitty tracing."
   ([]
    (enable-tracing! true))
   ([enable]
@@ -33,14 +33,14 @@
 
 
 (defn register-yarn
-  "Registers Yarn into the global registry, do nothing when
-   yarn is already registed and no-override flag is true."
+  "Registers a Yarn into the global registry. Does nothing if the Yarn
+   is already registered and the `no-override` flag is true."
   ([yarn]
    (register-yarn yarn false))
   ([yarn no-override]
    (let [k (impl/yarn-key yarn)]
      (when-not (qualified-keyword? k)
-       (throw (ex-info "yarn must be a qualified keyword" {::yarn k, ::class (type k)})))
+       (throw (ex-info "Yarn must be a qualified keyword" {::yarn k, ::class (type k)})))
      (if no-override
        (alter-var-root #'*registry* #(if (contains? % k) % (assoc % k yarn)))
        (alter-var-root #'*registry* assoc k yarn)))))
@@ -99,22 +99,22 @@
 
 
 (defmacro declare-yarn
-  "Defines abstract yarn without an implementation,
-   useful for making forward declarations."
+  "Defines an abstract Yarn without an implementation.
+   Useful for making forward declarations."
   [nm]
   {:pre [(ident? nm)]}
   (let [spec (:spec (meta nm))
         k (keyword (or (namespace nm)
                        (-> *ns* ns-name name))
                    (name nm))]
-    `(do (register-yarn (impl/fail-always-yarn ~k ~(str "declared-only yarn " k)) true)
+    `(do (register-yarn (impl/fail-always-yarn ~k ~(str "declared-only Yarn " k)) true)
          ~(when spec `(spec/def ~k ~spec))
          ~(when (simple-ident? nm) `(def ~nm ~k))
          ~k)))
 
 
 (defn bind-yarn
-  "Redeclares yarn as a symlink to the yarn-target."
+  "Redeclares a Yarn as a symlink to the `yarn-target`."
   [yarn yarn-target]
   {:pre [(qualified-keyword? yarn)
          (qualified-keyword? yarn-target)]}
@@ -173,8 +173,8 @@
 
 
 (defmacro yarn
-  "Returns yarn object (without registering into the global registry).
-   May capture variables from outer scope."
+  "Returns a Yarn object (without registering it into the global registry).
+   May capture variables from the outer scope."
   [k & exprs]
   (if (empty? exprs)
     (impl/gen-yarn-input k)
@@ -192,23 +192,22 @@
 
 
 (defmacro defyarn
-  "Defines yarn - computation node. Uses current *ns* to build qualified keyword as yarn id.
-  Examples:
+  "Defines a Yarn - a computation node. Uses the current `*ns*` to build a qualified keyword as the Yarn ID.
+   Examples:
 
-  ```clojure
+   ```clojure
+   ;; declare ::yarn-1 without a body
+   (defyarn yarn-1)
 
-  ;; declare ::yarn-1 without a body
-  (defyarn yarn-1)
+   ;; declare ::yarn-2 with a docstring
+   (defyarn yarn-2 \"documentation\")
 
-  ;; declare ::yarn-2 with docstring
-  (defyarn yarn-2 \"documentation\")
+   ;; define ::yarn-3 without any inputs
+   (defyarn yarn-3 {} (rand-int 10))
 
-  ;; define ::yarn-3 without any inputs
-  (defyarn yarn-3 {} (rand-int 10))
-
-  ;; define ::yarn-4 with inputs
-  (defyarn yarn-4 {x yarn-3} (str \"Random is\" x))
-  ```
+   ;; define ::yarn-4 with inputs
+   (defyarn yarn-4 {x yarn-3} (str \"Random is \" x))
+   ```
   "
   {:arglists '([name docstring?]
                [name docstring? [dependencies*] & body])}

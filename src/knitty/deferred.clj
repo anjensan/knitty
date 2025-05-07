@@ -510,7 +510,7 @@
        res#)))
 
 (defn zip
-  "Takes several values and returns a deferred that will yield vector of realized values."
+  "Takes several values and returns a deferred that will yield a vector of realized values."
   (^KDeferred [] (wrap-val []))
   (^KDeferred [a] (bind a (fn on-await-1 [x] [x])))
   (^KDeferred [a b] (zip-inline a b))
@@ -561,8 +561,8 @@
      3 (do (.chain res d) (when-not (.realized res) (alt-in res a b c))))))
 
 (defn alt
-  "Takes several values, some of which may be a deferred, and returns a
-  deferred that will yield the value which was realized first."
+  "Takes several values, some of which may be deferred, and returns a
+  deferred that will yield the value that is realized first."
   (^KDeferred [a]
    (wrap a))
   (^KDeferred [a b]
