@@ -313,7 +313,20 @@
               #(if (seq? %) `(^:once fn* [x#] (-> x# ~%)) %))
         forms)))
 
-(defmacro bind=> [=> expr & forms]
+(defmacro bind=>
+  "This macro allows you to chain deferred computations in a readable way, similar to `bind->`,
+   but with the ability to apply a custom threading operator (e.g., `=>`).
+
+       (bind=> ->> (future [1 2 3])
+         (map inc)
+         (filter even?)
+         (vec))
+
+       (bind=> (as-> x) (future 10)
+         (+ x 1)
+         (* 2 x))
+   "
+  [=> expr & forms]
   (let [=>' (if (seq? =>) => (list =>))]
     `(bind-> ~expr ~@(for [f forms]
                        (if (symbol? f)
@@ -643,7 +656,6 @@
        #(if (p/zero? %)
           %
           (recur (p/dec %)))))"
-
   [bindings & body]
   (let [bs (partition 2 bindings)
         syms (map first bs)
@@ -669,8 +681,10 @@
      (fn [x#]
        (when x#
          (bind ~pred
-               (fn ~'while-body [c#] (when c# (bind (do ~@body)
-                                                    (constantly true)))))))
+               (fn ~'while-body [c#]
+                 (when c#
+                   (bind (do ~@body)
+                         (constantly true)))))))
      (fn [x#] x#)
      (fn [_#] nil))))
 
@@ -731,6 +745,7 @@
         (doto d (listen! cf cf))))
 
 (defn sleep
+  "Creates a deferred that will be realized after a specified delay."
   ([time-ms]
    (time-in time-ms (create) #(success! % nil)))
   ([value time-ms]

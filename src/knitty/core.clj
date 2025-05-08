@@ -270,7 +270,7 @@
 
 
 (defmacro yarn-prefer-method
-  "Causes the multiyarn to prefer matches of dispatch-val-x over dispatch-val-y"
+  "Causes the multiyarn to prefer matches of `dispatch-val-x` over `dispatch-val-y`."
   [yarn-ref dispatch-val-x dispatch-val-y]
   (let [cf (conform-and-check ::yarn-ref yarn-ref)
         y (parse-yarn-ref &env cf)]
@@ -290,7 +290,7 @@
     - `:bindings` flag, indicating that thread-local bindings should be captured and installed for yarns;
     - `:tracing`  flag, do we need to capture tracing (introduce some perfomance penalties);
     - `:registry` a knitty registry with avalable yarns, usefull for mocking code.
-    "
+  "
   ([inputs yarns]
    (yank* inputs yarns nil))
   ([inputs yarns opts]
