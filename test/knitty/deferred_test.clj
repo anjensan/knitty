@@ -531,30 +531,42 @@
                        v' (map random-wrap v)]
                    (is (= (seq v) @(kd/zip* v')))))))
 
-(deftest ^:stress test-error-leak-detection
-  (dotimes-prn 100
-    (do
-      (System/gc)
+(deftest test-error-leak-detection
 
-      (let [n 100
-            logs (atom [])]
-        (with-redefs [log/log* (fn [& lm] (swap! logs conj lm))]
+  (letfn [(check-leaked-errors
+            [leaks-per-call f]
+            (do
+              (System/gc)
 
-          (dotimes [_ n]
-            (doto (kd/create)
-              (kd/error! (Throwable.))
-              (md/on-realized identity identity))
-            (doto (kd/create)
-              (kd/error! (Throwable.))))
+              (let [n 100
+                    k (* n leaks-per-call)
+                    logs (atom [])]
+                (with-redefs [log/log* (fn [& lm] (swap! logs conj lm))]
+                  (dotimes [_ n]
+                    (f))
+                  (System/gc)
+                  (let [tries (atom 0)]
+                    (while (and (< (swap! tries inc) 100)
+                                (not= k (count @logs)))
+                      (Thread/sleep 1)
+                      (System/gc)))
 
-          (System/gc)
+                  (is (== k (count @logs)))))))]
 
-          (let [tries (atom 0)]
-            (while (and (< (swap! tries inc) 1000)
-                        (not= n (count @logs)))
-              (Thread/sleep 1)))
+    (testing :error!
+      (check-leaked-errors 0 #(doto (kd/create)
+                                (kd/error! (Throwable.))
+                                (kd/listen! identity identity))))
+    (testing :error!
+      (check-leaked-errors 1 #(kd/error! (kd/create) (Throwable.))))
+    (testing :wrap-err
+      (check-leaked-errors 1 #(kd/wrap-err (Throwable.))))
+    (testing :future
+      (check-leaked-errors 1 #(kd/future (throw (Throwable.)))))
+    (testing :future-wrap-err
+      (check-leaked-errors 1 #(kd/future (kd/wrap-err (Throwable.)))))
 
-          (is (== n (count @logs))))))))
+    ))
 
 
 (deftest ^:stress test-deferred-chain
