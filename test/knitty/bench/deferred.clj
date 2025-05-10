@@ -284,42 +284,36 @@
   (do-mode-futures
    (testing :manifold
      (bench-suite
-      (bench :loop100v
-             @(bu/with-defer
-                (md/loop [x (ff 0)]
-                  (md/chain'
-                   x
-                   (fn [x]
-                     (if (< x 1000)
-                       (md/recur (ff (ninl-inc x)))
-                       x))))))
-      (bu/with-md-executor
-        (bench :loop100f
-               @(md/loop [x (bu/md-future 0)]
-                  (md/chain'
-                   x
-                   (fn [x]
-                     (if (< x 100)
-                       (md/recur (bu/md-future (ninl-inc x)))
-                       x))))))))
+      (tmpl/do-template
+       [t d]
+       (testing t
+         (bench :loop100
+                @(bu/with-defer
+                   (md/loop [x (dd 0)]
+                     (md/chain'
+                      x
+                      (fn [x]
+                        (if (< x 1000)
+                          (md/recur (dd (ninl-inc x)))
+                          x)))))))
+       :val dd
+       :fut ff)))
 
    (testing :knitty
      (bench-suite
-      (bench :loop100
-             @(bu/with-defer
-                (kd/loop [x (ff 0)]
-                  (if (< x 1000)
-                    (kd/recur (ff (ninl-inc x)))
-                    x))))
-      (bu/with-md-executor
-        (bench :loop100
-               @(kd/loop [x (bu/kt-future 0)]
-                  (if (< x 100)
-                    (kd/recur (bu/kt-future (ninl-inc x)))
-                    x))))
-      )))
-  ;;
-  )
+      (tmpl/do-template
+       [t d]
+       (testing t
+         (bench :loop100
+                @(bu/with-defer
+                   (kd/loop [x (ff 0)]
+                     (if (< x 1000)
+                       (kd/recur (ff (ninl-inc x)))
+                       x)))))
+       :val dd
+       :fut ff)))
+   ;;
+   ))
 
 
 (deftest ^:benchmark bench-deferred

@@ -15,29 +15,29 @@
     (bu/report-benchmark-fixture)]))
 
 (defmacro dd []
-  `(tu/ninl (kd/wrap 0)))
+  `(bu/ninl (kd/wrap 0)))
 
 (defmacro ff []
-  `(tu/ninl (doto (kd/create) (as-> d# (tu/defer! (kd/success! d# 0))))))
+  `(bu/ninl (doto (kd/create) (as-> d# (bu/defer! (kd/success! d# 0))))))
 
 ;; ===
 
 (deftest ^:benchmark benchmark-kd-kawait-sync
   (bu/bench-suite
    (bu/eval-template
-    (fn [a b] `(tu/bench ~a (apply-replicate-arg (kd/kd-await! tu/ninl-inc) ~b (dd))))
+    (fn [a b] `(bu/bench ~a (apply-replicate-arg (kd/kd-await! tu/ninl-inc) ~b (dd))))
     (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 (deftest ^:benchmark benchmark-kd-kawait-async
   (bu/bench-suite
    (bu/eval-template
-    (fn [a b] `(tu/bench ~a (tu/with-defer (apply-replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff)))))
+    (fn [a b] `(bu/bench ~a (bu/with-defer (apply-replicate-arg (kd/kd-await! bu/ninl-inc) ~b (ff)))))
     (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 (deftest ^:benchmark benchmark-kd-kawait-some-async
   (bu/bench-suite
    (bu/eval-template
-    (fn [a b] `(tu/bench ~a (tu/with-defer (apply-replicate-arg (kd/kd-await! tu/ninl-inc) ~b (ff) (dd) (dd)))))
+    (fn [a b] `(bu/bench ~a (bu/with-defer (apply-replicate-arg (kd/kd-await! bu/ninl-inc) ~b (ff) (dd) (dd)))))
     (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 
