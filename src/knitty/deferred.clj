@@ -37,6 +37,7 @@
           w)))))
 
 (defn build-fork-join-pool
+  ^ForkJoinPool
   [{:keys [parallelism
            factory
            factory-prefix
