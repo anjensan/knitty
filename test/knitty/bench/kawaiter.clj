@@ -25,7 +25,7 @@
 (deftest ^:benchmark benchmark-kd-kawait-sync
   (bu/bench-suite
    (bu/eval-template
-    (fn [a b] `(bu/bench ~a (apply-replicate-arg (kd/kd-await! tu/ninl-inc) ~b (dd))))
+    (fn [a b] `(bu/bench ~a (apply-replicate-arg (kd/kd-await! bu/ninl-inc) ~b (dd))))
     (for [x (range 25)] [(keyword (str "kd-await-x" x)) x]))))
 
 (deftest ^:benchmark benchmark-kd-kawait-async

@@ -291,12 +291,12 @@
        (testing t
          (bench :loop100
                 @(bu/with-defer
-                   (md/loop [x (dd 0)]
+                   (md/loop [x (d 0)]
                      (md/chain'
                       x
                       (fn [x]
                         (if (< x 1000)
-                          (md/recur (dd (ninl-inc x)))
+                          (md/recur (d (ninl-inc x)))
                           x)))))))
        :val dd
        :fut ff)))
@@ -308,9 +308,9 @@
        (testing t
          (bench :loop100
                 @(bu/with-defer
-                   (kd/loop [x (ff 0)]
+                   (kd/loop [x (d 0)]
                      (if (< x 1000)
-                       (kd/recur (ff (ninl-inc x)))
+                       (kd/recur (d (ninl-inc x)))
                        x)))))
        :val dd
        :fut ff)))
