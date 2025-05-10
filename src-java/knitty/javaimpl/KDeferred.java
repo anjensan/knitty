@@ -9,6 +9,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -380,21 +381,58 @@ public final class KDeferred
         }
     }
 
-    private static class Cdl extends AListener {
-        private final CountDownLatch cdl;
-
-        Cdl(CountDownLatch cdl) {
-            this.cdl = cdl;
-        }
+    private final static class Cdl extends AListener implements ForkJoinPool.ManagedBlocker {
+        private final CountDownLatch latch = new CountDownLatch(1);
 
         @Override
         public void success(Object x) {
-            cdl.countDown();
+            latch.countDown();
         }
 
         @Override
         public void error(Object e) {
-            cdl.countDown();
+            latch.countDown();
+        }
+
+        @Override
+        public boolean block() throws InterruptedException {
+            latch.await();
+            return true;
+        }
+
+        @Override
+        public boolean isReleasable() {
+            return latch.getCount() == 0;
+        }
+    }
+
+    private final static class CdlT extends AListener implements ForkJoinPool.ManagedBlocker {
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private final long timeout;
+
+        CdlT(long timeout) {
+            this.timeout = timeout;
+        }
+
+        @Override
+        public void success(Object x) {
+            latch.countDown();
+        }
+
+        @Override
+        public void error(Object e) {
+            latch.countDown();
+        }
+
+        @Override
+        public boolean block() throws InterruptedException {
+            latch.await(timeout, TimeUnit.MILLISECONDS);
+            return true;
+        }
+
+        @Override
+        public boolean isReleasable() {
+            return latch.getCount() == 0;
         }
     }
 
@@ -621,10 +659,6 @@ public final class KDeferred
         }
     }
 
-    private AListener tombListeners() {
-        return (AListener) LHEAD.getAndSet(this, LS_TOMB);
-    }
-
     private boolean complete(Object x) {
         return VALUE.compareAndExchangeRelease(this, MISS_VALUE, x) == MISS_VALUE;
     }
@@ -720,30 +754,36 @@ public final class KDeferred
     }
 
     private void fireSuccessListeners(Object x) {
-        AListener node = tombListeners();
+        AListener node = (AListener) LHEAD.getAndSet(this, LS_TOMB);
         this.weakState = STATE_SUCC;
-        for (; node != null; node = node.next) {
+        while (node != null) {
+            AListener curr = node;
             try {
-                node.success(x);
+                curr.success(x);
             } catch (Throwable e) {
                 logError(e, String.format("error in deferred success-handler: %s", node));
             }
+            node = curr.next;
+            curr.next = null;
         }
     }
 
     private void fireErrorListeners(ErrBox eb) {
-        AListener node = tombListeners();
+        AListener node = (AListener) LHEAD.getAndSet(this, LS_TOMB);
         this.weakState = STATE_ERRR;
         if (node == null) {
             eb.detectLeakedError(this);
         } else {
             Object x = eb.getError();
-            for (; node != null; node = node.next) {
+            while (node != null) {
+                AListener curr = node;
                 try {
-                    node.error(x);
+                    curr.error(x);
                 } catch (Throwable e) {
                     logError(e, String.format("error in deferred success-handler: %s", node));
                 }
+                node = curr.next;
+                curr.next = null;
             }
         }
     }
@@ -988,12 +1028,6 @@ public final class KDeferred
         return v;
     }
 
-    private CountDownLatch acquireCountdDownLatch() {
-        CountDownLatch cdl = new CountDownLatch(1);
-        this.listen(new Cdl(cdl));
-        return cdl;
-    }
-
     @Override
     public Object invoke() {
         return this.get();
@@ -1017,11 +1051,16 @@ public final class KDeferred
         if (ms <= 0) {
             return timeoutValue;
         }
+
+        CdlT cdl = new CdlT(ms);
+        this.listen(cdl);
+
         try {
-            acquireCountdDownLatch().await(ms, TimeUnit.MILLISECONDS);
+            ForkJoinPool.managedBlock(cdl);
         } catch (InterruptedException e) {
             throw Util.sneakyThrow(e);
         }
+
         v = this.getRaw();
         if (v != MISS_VALUE) {
             return unwrapValue(v);
@@ -1035,8 +1074,10 @@ public final class KDeferred
         if (v != MISS_VALUE) {
             return unwrapValue(v);
         }
+        Cdl cdl = new Cdl();
+        this.listen(cdl);
         try {
-            acquireCountdDownLatch().await();
+            ForkJoinPool.managedBlock(cdl);
         } catch (InterruptedException e) {
             throw Util.sneakyThrow(e);
         }

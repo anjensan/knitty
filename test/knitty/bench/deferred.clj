@@ -7,7 +7,9 @@
                                            with-defer]]
    [knitty.deferred :as kd]
    [knitty.test-util :as tu]
-   [manifold.deferred :as md]))
+   [manifold.deferred :as md])
+  (:import
+   [java.util.concurrent ForkJoinPool]))
 
 
 (set! *warn-on-reflection* true)
@@ -363,6 +365,32 @@
 
    :manifold (md/deferred nil)
    :knitty (kd/create)))
+
+
+
+
+(deftest ^:benchmark bench-deferred-await
+  (tmpl/do-template
+   [t fut]
+   (testing t
+     (bench-suite
+      (bu/with-md-executor
+
+        (bench :await-1-sync
+               @(fut 0))
+
+        (bench :await-100
+               (let [fs (mapv #(fut %) (range 100))]
+                 (doseq [f fs] @f)))
+
+        (bench :await-100-fjp
+               (let [p (ForkJoinPool/commonPool)
+                     fs (mapv #(fut %) (range 100))
+                     ^Runnable r (fn [] (doseq [f fs] @f))]
+                 (.get (.submit p r nil)))))))
+
+   :manifold bu/md-future
+   :knitty   bu/kt-future))
 
 
 (comment

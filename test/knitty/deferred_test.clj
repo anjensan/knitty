@@ -41,23 +41,21 @@
       clojure.lang.IFn
       (invoke [_] (ffirst (swap-vals! x next)))
       clojure.lang.Seqable
-      (seq [_] (seq @x))
-      )))
+      (seq [_] (seq @x)))))
 
 
 (deftest test-catch
 
   (is (thrown? ArithmeticException
-                 @(-> 0
-                      (kd/bind #(/ 1 %))
-                      (kd/bind-err IllegalStateException (constantly :foo)))))
+               @(-> 0
+                    (kd/bind #(/ 1 %))
+                    (kd/bind-err IllegalStateException (constantly :foo)))))
 
   (is (thrown? ArithmeticException
                @(-> 0
                     (kd/future)
                     (kd/bind #(do (/ 1 %)))
-                    (kd/bind-err IllegalStateException (constantly :foo))
-                    )))
+                    (kd/bind-err IllegalStateException (constantly :foo)))))
 
   (is (= :foo
          @(-> 0
@@ -87,36 +85,35 @@
                      x (kd/future z)
                      _ (kd/future (Thread/sleep 1000) (reset! flag true))
                      y (kd/future (+ z x))]
-                (kd/future (+ x x y z))))
+                    (kd/future (+ x x y z))))
     (is (= true @flag)))
 
   (is (= 5
          @(let [z (clojure.core/future 1)]
             (kd/let-bind [z (kd/wrap* z)
-                      x (kd/future (kd/wrap* (clojure.core/future z)))
-                      y (kd/future (+ z x))]
-                     (kd/future (+ x x y z))))))
+                          x (kd/future (kd/wrap* (clojure.core/future z)))
+                          y (kd/future (+ z x))]
+                         (kd/future (+ x x y z))))))
 
   (is (= 2
          @(let [d (kd/create)]
             (kd/let-bind [[x] (future' [1])]
-                     (kd/join
-                      (kd/let-bind [[x'] (future' [(inc x)])
-                                y (future' true)]
-                               (when y x'))))))))
+                         (kd/join
+                          (kd/let-bind [[x'] (future' [(inc x)])
+                                        y (future' true)]
+                                       (when y x'))))))))
 
 
 (deftest test-chain-errors
   (let [boom (fn [n] (throw (ex-info "" {:n n})))]
-    (doseq [b [boom (fn [n] (kd/future (boom n)))]]
+    (doseq [_ [boom (fn [n] (kd/future (boom n)))]]
       (dorun
        (for [i (range 10)
              j (range 10)]
          (let [fs (concat (repeat i inc) [boom] (repeat j inc))]
            (is (= i
                   @(-> (reduce kd/bind 0 fs)
-                       (kd/bind-err (fn [e] (:n (ex-data e)))))
-                  ))))))))
+                       (kd/bind-err (fn [e] (:n (ex-data e)))))))))))))
 
 
 (deftest test-chain
@@ -129,8 +126,7 @@
                    (update-in [j] (fn [f] #(kd/future (f %)))))]
        (is
         (= (reduce #(%2 %1) 0 fs)
-           @(reduce kd/bind 0 fs')
-           ))))))
+           @(reduce kd/bind 0 fs')))))))
 
 
 (deftest test-deferred
@@ -288,7 +284,7 @@
 
   (testing "body produces a realized result"
     (is (nil? @(capture-success
-                  (kd/while (kd/wrap-val false))))))
+                (kd/while (kd/wrap-val false))))))
 
   (testing "body produces a realized error result"
     (let [ex (Exception.)]
@@ -334,17 +330,16 @@
       (is (nil? @(capture-success
                   (kd/while (ds) (future' (swap! c inc))))))
       (is (empty? ds))
-      (is (= 3 @c))))
-  )
+      (is (= 3 @c)))))
 
 
 (deftest test-finally
   (let [target-d (kd/create)
         d        (kd/create)
         fd       (kd/bind-fnl
-                   d
-                   (fn []
-                     (kd/success! target-d ::delivered)))]
+                  d
+                  (fn []
+                    (kd/success! target-d ::delivered)))]
     (kd/listen! fd identity identity)  ;; clear ELD
     (kd/error! d (Exception.))
     (is (= ::delivered (deref target-d 0 ::not-delivered)))))
@@ -397,9 +392,7 @@
 
   (let [e (Exception. "boo")]
     (is (= e @(capture-error @(capture-success (kd/join1 (kd/future (kd/wrap-val (kd/future (kd/wrap-val (kd/future (throw e)))))))))))
-    (is (= e @(capture-error (kd/join (kd/future (kd/wrap-val (kd/future (kd/wrap-val (kd/future (throw e)))))))))))
-
-  )
+    (is (= e @(capture-error (kd/join (kd/future (kd/wrap-val (kd/future (kd/wrap-val (kd/future (throw e))))))))))))
 
 
 (deftest test-zip
@@ -436,8 +429,7 @@
         (let [e (Exception. "boo")
               v (vec (range n))
               v (assoc v i (kd/wrap-err e))]
-          (is (= e @(capture-error (apply kd/zip (map #(kd/future %) v)))))))))
-  )
+          (is (= e @(capture-error (apply kd/zip (map #(kd/future %) v))))))))))
 
 
 (deftest test-zip*
@@ -469,14 +461,13 @@
               v (assoc v i (kd/wrap-err e))]
           (is (= e @(capture-error (kd/zip* v)))))))))
 
-  (testing "zip futures with failure"
-    (dotimes [n 30]
-      (dotimes [i n]
-        (let [e (Exception. "boo")
-              v (vec (range n))
-              v (assoc v i (kd/wrap-err e))]
-          (is (= e @(capture-error (kd/zip* (map #(kd/future %) v))))))))
-  )
+(testing "zip futures with failure"
+  (dotimes [n 30]
+    (dotimes [i n]
+      (let [e (Exception. "boo")
+            v (vec (range n))
+            v (assoc v i (kd/wrap-err e))]
+        (is (= e @(capture-error (kd/zip* (map #(kd/future %) v)))))))))
 
 
 (deftest test-timeout
@@ -564,25 +555,41 @@
     (testing :future
       (check-leaked-errors 1 #(kd/future (throw (Throwable.)))))
     (testing :future-wrap-err
-      (check-leaked-errors 1 #(kd/future (kd/wrap-err (Throwable.)))))
+      (check-leaked-errors 1 #(kd/future (kd/wrap-err (Throwable.)))))))
 
-    ))
+
+(deftest bench-deferred-await-fjp
+  (testing "@kdeferred instructs FJP to spawn more threads"
+    (let [p (kd/build-fork-join-pool {:parallelism 2})]
+      (try
+        (letfn [(f [x]
+                  (if (> x 1)
+                    (let [x1 (quot x 2)
+                          x2 (- x x1)
+                          a (kd/future-with p (f x1))
+                          b (kd/future-with p (f x2))]
+                      (+ (deref a 100 0) @b))
+                    x))]
+          (is (= 100
+                 (deref (future (f 100)) 1000 ::timeout))))
+        (finally
+          (.shutdownNow p))))))
 
 
 (deftest ^:stress test-deferred-chain
   (dotimes-prn 1000
-    (let [d      (kd/create)
-          result (kd/future
-                   (last
-                    (take 10000
-                          (iterate
-                           #(let [d' (kd/create)]
-                              (kd/connect % d')
-                              d')
-                           d))))]
-      (Thread/sleep (long (rand-int 10)))
-      (kd/success! d 1)
-      (is (= 1 @result)))))
+               (let [d      (kd/create)
+                     result (kd/future
+                              (last
+                               (take 10000
+                                     (iterate
+                                      #(let [d' (kd/create)]
+                                         (kd/connect % d')
+                                         d')
+                                      d))))]
+                 (Thread/sleep (long (rand-int 10)))
+                 (kd/success! d 1)
+                 (is (= 1 @result)))))
 
 
 
