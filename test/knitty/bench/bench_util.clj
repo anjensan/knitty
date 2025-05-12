@@ -34,6 +34,9 @@
     (some? (System/getenv "knitty_qb")) cc/*default-quick-bench-opts*
     :else cc/*default-benchmark-opts*))
 
+(def benchmark-use-subprocess
+  (not (some? (System/getenv "knitty_qb_smoke"))))
+
 
 (def ^:dynamic *bench-results*
   (atom []))
@@ -140,14 +143,28 @@
               (for [r rs
                     :let [t (-> r :test-id classify-test-id second)]
                     :when t]
-                [t (-> r :mean first fmt-time-value)])))
+                [t (-> r :mean first)])))
            (filter #(-> % keys count (> 2))))
         idlen (reduce max 10 (map (comp count :id) g))
-        idf (str "%-" idlen "s")]
+        basecol (first all-classes)
+        idf (str "%-" idlen "s")
+        ]
     (pp/print-table
      (cons :id all-classes)
      (->> g
           (map #(assoc % :id (format idf (:id %))))
+          (map (fn [row]
+                 (let [base (get row basecol)]
+                   (into row
+                         (for [c all-classes
+                               :let [v (get row c)]
+                               :when (some? v)]
+                           [c
+                            (str (fmt-time-value v)
+                                 " ("
+                                 (format "%+4.0f%%" (-> v (/ base) (* 100) (- 100)))
+                                 ")"
+                                 )])))))
           (sort-by ::order)))))
 
 
@@ -166,22 +183,26 @@
 
 
 (defn eval-in-separate-jvm [ns-name code]
-  (let [i (str (java.io.File/createTempFile "knitty-tests/run/" ".clj"))
-        t (str (java.io.File/createTempFile "knitty-tests/ret/" ".edn"))
-        cp (System/getProperty "java.class.path")
-        e (pr-str `(do
-                     (require '~ns-name)
-                     (in-ns '~ns-name)
-                     (let [v# ~code]
-                       (spit ~t (pr-str v#)))))]
-    (spit i e)
-    (->
-     (proc/start
-      {:in :inherit, :out :inherit, :err :inherit}
-      "java" "-cp" cp "clojure.main" "-i" i)
-     (proc/exit-ref)
-     (deref))
-    (read-string (slurp t))))
+
+  (if benchmark-use-subprocess
+    (let [i (str (java.io.File/createTempFile "knitty-tests/run/" ".clj"))
+          t (str (java.io.File/createTempFile "knitty-tests/ret/" ".edn"))
+          cp (System/getProperty "java.class.path")
+          e (pr-str `(do
+                       (require '~ns-name)
+                       (in-ns '~ns-name)
+                       (let [v# ~code]
+                         (spit ~t (pr-str v#)))))]
+      (spit i e)
+      (->
+       (proc/start
+        {:in :inherit, :out :inherit, :err :inherit}
+        "java" "-cp" cp "clojure.main" "-i" i)
+       (proc/exit-ref)
+       (deref))
+      (read-string (slurp t)))
+    (eval `(do (in-ns '~ns-name)
+               ~code))))
 
 
 (defn bench* [id expr-fn]
