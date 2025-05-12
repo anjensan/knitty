@@ -1261,10 +1261,8 @@ public final class KDeferred
     }
 
     public static KDeferred wrap(Object x) {
-        if (x instanceof KDeferred) {
-            return (KDeferred) x;
-        } if (x instanceof IDeferred) {
-            return wrapDeferred((IDeferred) x);
+        if (x instanceof IDeferred) {
+            return coerceDeferred((IDeferred) x);
         } else {
             return wrapVal(x);
         }
