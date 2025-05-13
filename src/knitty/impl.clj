@@ -4,13 +4,13 @@
             [knitty.trace :as t]
             [manifold.executor]
             [manifold.utils])
-  (:import [clojure.lang AFn]
-           [java.util Arrays]
+  (:import [java.util Arrays]
            [knitty.javaimpl
             KDeferred
             KwMapper
             YankCtx
-            YarnProvider]))
+            YarnProvider
+            Yarn]))
 
 
 (set! *warn-on-reflection* true)
@@ -28,39 +28,46 @@
   ([fnname ykey deps bodyf]
    `(decl-yarn ~fnname ~ykey ~deps ~bodyf nil))
   ([fnname ykey deps [_fn [ctx dst] & body] multifn]
-   `(fn
-      ~(gensym (str fnname "-"))
-      ([] ~(if (and (keyword? ykey)
-                    (set? deps))
-             (->YarnInfo
-              :knitty/yarn-info
-              ykey
-              deps
-              body
-              multifn)
-             (list
-              `->YarnInfo
-              :knitty/yarn-info
-              ykey
-              deps
-              (list `quote body)
-              multifn)))
-      ([~(vary-meta ctx assoc :tag "knitty.javaimpl.YankCtx")
-        ~(vary-meta dst assoc :tag "knitty.javaimpl.KDeferred")]
-       ~@body))))
+   `((fn
+       ~(-> fnname (str) (symbol))
+       []
+       (reify
+         Yarn
+         (call [_# ctx# dst#]
+           (let [~ctx ctx#
+                 ~dst dst#]
+             ~@body))
+         (getKey [_#]
+           ~ykey)
+         (getInfo [_#]
+           ~(if (and (keyword? ykey)
+                     (set? deps))
+              (->YarnInfo
+               :knitty/yarn-info
+               ykey
+               deps
+               body
+               multifn)
+              (list
+               `->YarnInfo
+               :knitty/yarn-info
+               ykey
+               deps
+               (list `quote body)
+               multifn))))))))
 
 
 (definline yarn-deps [y]
-  `(:deps (~y)))
+  `(:deps (let [^Yarn y# ~y] (.getInfo y#))))
 
 (definline yarn-key [y]
-  `(:key (~y)))
+  `(let [^Yarn y# ~y] (.getKey y#)))
 
 (definline yarn-multifn [y]
-  `(:multifn (~y)))
+  `(:multifn (let [^Yarn y# ~y] (.getInfo y#))))
 
 (definline yarn-yank [y ctx d]
-  `(~y ~ctx ~d))
+  `(let [^Yarn y# ~y] (.call y# ~ctx ~d)))
 
 (defn- detect-and-throw-yarn-cycle!
   [root n path yarns]
@@ -72,13 +79,13 @@
       (detect-and-throw-yarn-cycle! root p (cons p path) yarns))))
 
 
-(defn- ensure-array-len ^objects [^objects arr ^long new-size]
+(defn- ensure-array-len ^Yarn/1 [^Yarn/1 arr ^long new-size]
   (if (>= (alength arr) new-size)
     arr
     (Arrays/copyOf arr (-> new-size (quot 128) (inc) (* 128)))))
 
 
-(defn- array-copy ^objects [^objects arr]
+(defn- array-copy ^Yarn/1 [^Yarn/1 arr]
   (Arrays/copyOf arr (alength arr)))
 
 
@@ -95,7 +102,7 @@
   (count [_] (count asmap))
   (cons [t x] (.assoc t (yarn-key x) x))
   (equiv [_ o] (and (instance? Registry o) (= asmap (.-asmap ^Registry o))))
-  (empty [_] (Registry. (make-array AFn 32) {} {}))
+  (empty [_] (Registry. (make-array Yarn 32) {} {}))
 
   clojure.lang.ILookup
   (valAt [_ k] (asmap k))
@@ -123,16 +130,16 @@
         (doseq [d deps]
           (detect-and-throw-yarn-cycle! k d [k] asmap)))
 
-      (let [^objects ycache' (if (contains? asmap k)
-                               (array-copy ycache)                      ;; redefined yarn
-                               (ensure-array-len ycache (inc max-idx))  ;; new yarn - reuse cache
-                               )]
+      (let [^Yarn/1 ycache' (if (contains? asmap k)
+                              (array-copy ycache)                      ;; redefined yarn
+                              (ensure-array-len ycache (inc max-idx))  ;; new yarn - reuse cache
+                              )]
         (YankCtx/putYarnIntoCache ycache' i v)
         (Registry. ycache' (assoc asmap k v) all-deps')))))
 
 
 (defn create-registry []
-  (Registry. (make-array AFn 32) {} {}))
+  (Registry. (make-array Yarn 32) {} {}))
 
 
 (defn bind-param-type [ds]

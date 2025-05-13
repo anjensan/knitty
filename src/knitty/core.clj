@@ -11,6 +11,22 @@
 (def ^:dynamic *tracing*
   false)
 
+(defn create-registry
+  "Creates and returns a new, empty Knitty registry.
+   New yarns may be added to registry by calling `conj`:
+
+     (def my-reg
+       (-> (create-registry)
+         (conj (yarn ::one {} 1))
+         (conj (yarn ::two {x ::one} (inc x)))))
+
+     @(yank {} [::two] {:registry my-reg})
+
+     (register-yarn (get my-reg ::one))
+  "
+  []
+  (impl/create-registry))
+
 (defn enable-tracing!
   "Globally enables Knitty tracing."
   ([]

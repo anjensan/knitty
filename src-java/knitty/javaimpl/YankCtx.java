@@ -23,7 +23,6 @@ public final class YankCtx {
     private static final Keyword KNITTY_YANK_ERROR   = Keyword.intern("knitty", "yank-error?");
 
     private static final Object NONE = new Object();
-    private static final Keyword KEYFN = Keyword.intern("key");
 
     static final int ASHIFT = 5;
     static final int ASIZE = 1 << ASHIFT;
@@ -31,7 +30,7 @@ public final class YankCtx {
 
     private static final VarHandle AR0 = MethodHandles.arrayElementVarHandle(KDeferred[][].class);
     private static final VarHandle AR1 = MethodHandles.arrayElementVarHandle(KDeferred[].class);
-    private static final VarHandle YSC = MethodHandles.arrayElementVarHandle(AFn[].class);
+    private static final VarHandle YSC = MethodHandles.arrayElementVarHandle(Yarn[].class);
     private static final VarHandle ADDED;
     static {
         try {
@@ -48,7 +47,7 @@ public final class YankCtx {
     private final KDeferred[][] a0;
 
     private final YankInputs inputs;
-    private final AFn[] yarnsCache;
+    private final Yarn[] yarnsCache;
     private final YarnProvider yankerProvider;
     private final KwMapper kwMapper;
     private final boolean loadInputs;
@@ -216,8 +215,8 @@ public final class YankCtx {
                 }
                 r = this.fetch(i0, k);
             } else {
-                AFn y = (AFn) x;
-                Keyword k = (Keyword) KEYFN.invoke(y.invoke());
+                Yarn y = (Yarn) x;
+                Keyword k = y.getKey();
                 int i0 = this.kwMapper.resolveByKeyword(k);
                 if (i0 == -1) {
                     throw new IllegalArgumentException("unknown yarn " + k);
@@ -299,10 +298,10 @@ public final class YankCtx {
         return false;
     }
 
-    public final KDeferred fetch(int i, Keyword k, AFn y) {
+    public final KDeferred fetch(int i, Keyword k, Yarn y) {
         KDeferred d = pull(i);
         if (d.retain() && fetch0(d, i, k)) {
-            y.invoke(this, d);
+            y.call(this, d);
         }
         return d;
     }
@@ -310,14 +309,14 @@ public final class YankCtx {
     public final KDeferred fetch(int i, Keyword k) {
         KDeferred d = pull(i);
         if (d.retain() && fetch0(d, i, k)) {
-            AFn y = this.yarn(i);
-            y.invoke(this, d);
+            Yarn y = this.yarn(i);
+            y.call(this, d);
         }
         return d;
     }
 
-    private AFn yarn(int i) {
-        AFn y = (AFn) YSC.getAcquire(yarnsCache, i);
+    private Yarn yarn(int i) {
+        Yarn y = (Yarn) YSC.getAcquire(yarnsCache, i);
         if (y != null) {
             return y;
         }
@@ -326,7 +325,7 @@ public final class YankCtx {
         return y;
     }
 
-    public static void putYarnIntoCache(AFn[] yarnsCache, int idx, AFn yarn) {
+    public static void putYarnIntoCache(Yarn[] yarnsCache, int idx, Yarn yarn) {
         YSC.setRelease(yarnsCache, idx, yarn);
     }
 
