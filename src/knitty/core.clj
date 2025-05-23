@@ -20,16 +20,11 @@
 
 
 (defn set-executor!
-  "Globally set knitty executor."
-  ([executor]
-   (set-executor! executor true))
-  ([executor shutdown-current]
-   (alter-var-root #'kd/*executor*
-                   (fn [e]
-                     (when (and shutdown-current
-                                (instance? java.util.concurrent.ExecutorService e))
-                       (.shutdown ^java.util.concurrent.ExecutorService e))
-                     executor))))
+  "Globally set knitty executor, returns old value."
+  [executor]
+  (let [a (atom nil)]
+    (alter-var-root #'kd/*executor* (fn [x] (reset! a x) executor))
+    @a))
 
 
 (defn register-yarn
