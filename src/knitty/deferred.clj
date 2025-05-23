@@ -10,8 +10,7 @@
    [manifold.deferred :as md]
    [manifold.executor :as ex])
   (:import
-   [clojure.lang Agent IFn Var]
-   [java.lang.ref WeakReference]
+   [clojure.lang IFn Var]
    [java.util.concurrent
     Executor
     ForkJoinPool
@@ -726,20 +725,18 @@
   [^double delay
    ^IDeferred d
    ^IFn f]
-  (let* [r (WeakReference. d)
-         ^Executor me *executor*
+  (let* [^Executor me *executor*
          sf (.schedule
              *sched-executor*
              ^Runnable
              (fn []
-               (when-some [^IDeferred d' (.get r)]
-                 (.execute
-                  me
-                  (fn []
-                    (when-not (.realized d')
-                      (try
-                        (f d')
-                        (catch Throwable e (error! d' e))))))))
+               (.execute
+                me
+                (fn []
+                  (when-not (.realized d)
+                    (try
+                      (f d)
+                      (catch Throwable e (error! d e)))))))
              (long (unchecked-multiply delay 1000))
              java.util.concurrent.TimeUnit/MICROSECONDS)
          cf (fn [_] (.cancel sf false))]
