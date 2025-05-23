@@ -1,4 +1,5 @@
 (ns knitty.traceviz
+  "Provides functions for visualizing yarn execution traces."
   (:require [knitty.trace :as t]
             [clojure.datafy :refer [datafy]]
             [clojure.java.browse :as browse]
@@ -11,18 +12,31 @@
 
 
 (def ^:dynamic *options*
-  {:format :auto        ;; #{:xdot :raw :edn :svg :svgz :png :pdf :webp :json}
-   :dpi 120             ;; rendering dpi
-   :width 150           ;; max text width
-   :lines 32            ;; max lines in text
-   :pp-max-len 20       ;; print first n items of seqs
-   :pp-max-level 6      ;; print first n levels of colls
-   :clusters true       ;; group sub-traces into clusters
-   :concentrate false   ;; concentrate edges (merge)
-   :hspace 0.5          ;; horizontal space between nodes
-   :vspace 1.5          ;; vertical space between nodes
-   :show-unused false   ;; show unused nodes
-   })
+  "Default options for trace visualization.
+
+  - :format       - Output format (:auto, :raw, :edn, :dot, :xdot, :svg, :png, etc.)
+  - :dpi          - Rendering DPI.
+  - :width        - Maximum width (in characters) for printed node labels.
+  - :lines        - Maximum number of lines printed for each label.
+  - :pp-max-len   - Maximum number of items to print in sequences.
+  - :pp-max-level - Maximum depth for pretty-printing nested collections.
+  - :clusters     - Boolean indicating whether to group nodes in clusters.
+  - :concentrate  - Boolean to merge/concentrate graph edges.
+  - :hspace       - Horizontal spacing for graph layout.
+  - :vspace       - Vertical spacing for graph layout.
+  - :show-unused  - Boolean indicating whether to show unused nodes.
+  "
+  {:format :auto
+   :dpi 120
+   :width 150
+   :lines 32
+   :pp-max-len 20
+   :pp-max-level 6
+   :clusters true
+   :concentrate false
+   :hspace 0.5
+   :vspace 1.5
+   :show-unused false})
 
 
 (defn- graphviz-escape [s]
@@ -269,7 +283,8 @@
   (str/replace d "\\" "⧵"))
 
 
-(defn maybe-parse-traces [x]
+(defn- maybe-parse-traces
+  [x]
   (or
    (when (and (map? x)
               (= :knitty/parsed-trace (:type x)))
@@ -281,9 +296,20 @@
 
 
 (defn render-trace
-  [traces & {:as options}]
+  "Renders the provided trace data into a visual representation.
+
+  Supports multiple output formats based on the :format option in *options*:
+  - :raw   - the parsed trace data as is.
+  - :edn   - returns an EDN-formatted string of the parsed trace.
+  - :dot   - returns the trace graph in Graphviz dot format.
+  - :xdot  - returns the dot format with xdot-specific escapes fixed.
+  - :svg, :png, etc. - returns an image rendered from the trace graph.
+
+  Additional options can be provided to override *options*.
+  "
+  [yank-result-or-trace & {:as options}]
   (binding [*options* (into *options* options)]
-    (when-let [g (maybe-parse-traces traces)]
+    (when-let [g (maybe-parse-traces yank-result-or-trace)]
       (case (:format *options*)
         :raw g
         :edn (pr-str g)
@@ -295,27 +321,37 @@
 
 
 (def xdot-available
+  "A delayed flag indicating whether xdot is available on the system."
   (delay
    (zero? (:exit (shell/sh "python" "-m" "xdot" "--help")))))
 
 
 (def graphviz-available
+  "A delayed flag indicating whether Graphviz (dot) is available on the system."
   (delay
    (zero? (:exit (shell/sh "dot" "-V")))))
 
 
-(defn- open-rendered-trace [poy options open-f]
-  (let [t (apply render-trace poy (mapcat identity options))
+(defn- open-rendered-trace [yank-result-or-trace options open-f]
+  (let [t (apply render-trace yank-result-or-trace (mapcat identity options))
         f (java.io.File/createTempFile
            "knitty-"
            (str "." (name (:format options))))]
     (when-not t
-      (throw (ex-info "trace not found" {::yank-result poy})))
+      (throw (ex-info "trace not found" {::yank-result yank-result-or-trace})))
     (io/copy t f)
     (future (open-f (str f)))))
 
 
-(defn view-trace [poy & {:as options}]
+(defn view-trace
+  "Opens a visual representation of the trace data using an external viewer.
+
+  Based on the specified :format, the function works as follows:
+  - If the format is :xdot (or :auto with xdot available), it renders the trace in xdot format and opens it using xdot.
+  - If an image format (e.g. :svg, :png, etc.) is specified it renders the trace and opens it using the default browser.
+  - If the format is :edn or :raw, it renders the trace in EDN format and opens it with the default viewer.
+  "
+  [yank-result-or-trace & {:as options}]
   (let [options (merge *options* options)
         f (:format options)
         auto (= :auto f)]
@@ -326,17 +362,17 @@
        (and auto
             (force xdot-available)
             (force graphviz-available)))
-      (open-rendered-trace poy
+      (open-rendered-trace yank-result-or-trace
                            (assoc options :format :xdot)
                            #(shell/sh "xdot" %))
 
       (or
        (#{:svg :svgz :png :pdf :webp :json} f)
        (and auto (force graphviz-available)))
-      (open-rendered-trace poy options browse/browse-url)
+      (open-rendered-trace yank-result-or-trace options browse/browse-url)
 
       (#{:auto :edn :raw} f)
-      (open-rendered-trace poy (assoc options :format :edn)
+      (open-rendered-trace yank-result-or-trace (assoc options :format :edn)
                            browse/browse-url)
 
       :else

@@ -1,4 +1,5 @@
 (ns knitty.testing
+  "This namespace provides utilities for testing and mocking the Knitty system."
   (:require
    [clojure.set :as set]
    [knitty.core :as kt]
@@ -46,65 +47,79 @@
   )
 
 
-(defn mock-registry [registry yarn-key->mock-yarn]
+(defn mock-registry
+  "Creates a mock registry based on the given real registry and a mapping function.
+  The mock registry will use `yarn-key->mock-yarn` to override yarns when present; otherwise, it
+  delegates to the real registry.
+"
+  [registry yarn-key->mock-yarn]
   (MockRegistry. yarn-key->mock-yarn registry))
 
 
-(defn with-yarns* [yarns body-fn]
+(defn with-yarns*
+  "Executes the provided body function with additional yarns merged into the global registry."
+  [yarns body-fn]
   (binding [kt/*registry* (into kt/*registry* yarns)]
     (body-fn)))
 
 
 (defmacro with-yarns
-  "Run body with additional yarns attached to the registry.
-   This function known to be slow, intended only for testing/mocking!"
+  "Runs the given body with additional yarns attached to the registry.
+   This macro is intended for testing or mocking scenarios and is known to be slow."
   [yarns & body]
   `(with-yarns* ~yarns (fn [] ~@body)))
 
 
-(defn with-yarns-only* [predicate body-fn]
+(defn with-yarns-only*
+  "Runs the provided body function with yarns filtered by a predicate.
+
+  For each yarn in the registry, if the predicate returns false then that yarn is disabled by
+  replacing it with a 'fail always' stub."
+  [predicate body-fn]
   (let [r kt/*registry*
-        mf (fn [k] (when-not (predicate k) (impl/fail-always-yarn k (str "yarn " k " is disabled"))))
+        mf (fn [k] (when-not (predicate k)
+                     (impl/fail-always-yarn k (str "yarn " k " is disabled"))))
         r' (mock-registry r mf)]
     (binding [kt/*registry* r']
       (body-fn))))
 
 
-(defn- coerce-to-re-nspred [ns]
+(defn- coerce-to-re-nspred
+  [ns]
   (condp instance? ns
     java.lang.String #(= % (name ns))
     clojure.lang.Symbol #(= % (name ns))
     java.util.regex.Pattern #(re-matches ns %)
     clojure.lang.Namespace #(= % (name (ns-name ns)))
-    (throw (ex-info "unable to build namespace predicate" {::ns ns}))
-  ))
+    (throw (ex-info "unable to build namespace predicate" {::ns ns}))))
 
 
 (defn from-ns
-  "Build keyword predicate mathing to any namespace from `nss`.
-   Namespaces may be specified as strings, symbols or regex patterns."
+  "Builds a keyword predicate that matches any namespace from the given specifications.
+   Namespaces may be specified as strings, symbols, or regex patterns."
   [& nss]
   (let [p (apply some-fn (mapv coerce-to-re-nspred nss))]
     (fn [k] (p (name (namespace k))))))
 
 
 (defmacro from-this-ns
-  "Build keyword predicate mathing to keywords only from `*ns*`."
+  "Builds a keyword predicate that matches keywords only from the current namespace (*ns*)."
   []
   `(from-ns *ns*))
 
 
 (defmacro with-yarns-only
-  "Run body with some yarns deactivated.
-   Predicate is called with yarn-id (namespaced keyword) for all available yarns in the registry.
-   If predicate returns false yarn is replaced with 'fail always' stub.
-   This function known to be slow, intended only for testing/mocking!
+  "Runs the body with some yarns deactivated based on a predicate.
 
-   Disable all yarns except from current namespace:
+  The predicate is called with each yarn-id (a namespaced keyword) in the registry. If it returns false,
+  the yarn is replaced with a 'fail always' stub.
 
-       (with-yarns-only (from-this-ns)
-         @(yank {...} [...]))
-   "
+  For example, to disable all yarns except those from the current namespace:
+
+      (with-yarns-only (from-this-ns)
+        (do-something))
+
+  This macro is intended for testing or mocking and is known to be slow."
   [predicate & body]
   `(with-yarns-only* ~predicate (fn [] ~@body)))
 
@@ -117,19 +132,18 @@
   (let [ns (keys g)
         g' (assoc g ::root ns)
         visited (atom #{})
-        result (atom ())]
+        result (atom [])]
     (letfn [(dfs! [n]
-             (when-not (@visited n)
-               (swap! visited conj n)
-               (doseq [n' (g' n)]
-                 (dfs! n'))
-               (swap! result conj n)))]
+              (when-not (@visited n)
+                (swap! visited conj n)
+                (doseq [n' (g' n)]
+                  (dfs! n'))
+                (swap! result conj n)))]
       (dfs! ::root)
-      (rest @result) ;; skip ::root
-      )))
+      (rest @result))))  ;; skip ::root
 
 (defn- expand-transitives [g]
-  (let [ns (reverse (topo-order g))]
+  (let [ns (topo-order g)]
     (reduce
      (fn [t n]
        (assoc t n
@@ -139,10 +153,28 @@
      {}
      ns)))
 
-(defn explain-yank-result [yank-result]
+
+(defn explain-yank-result
+  "Analyzes a yank-result by extracting trace information and computing dependency graphs.
+
+   Returns a map containing keys:
+   - :ok?     - Boolean indicating whether the yank succeeded.
+   - :result  - The yank result or thrown exception.
+   - :traces  - A sequence of trace records.
+   - :yanked  - A set of yanked node identifiers.
+   - :failed  - A set of node identifiers that failed.
+   - :called  - A set of computed node identifiers.
+   - :leaked  - A set of node identifiers that started but did not finish.
+   - :use     - Graph (adjacency list) of direct node usages.
+   - :use*    - Graph of transitive node usages.
+   - :depend  - Graph of direct dependencies.
+   - :depend* - Graph of transitive dependencies.
+
+  Throws an exception if no traces are attached to the yank-result."
+  [yank-result]
   (let [ts (t/find-traces yank-result)]
     (when-not ts
-      (throw (ex-info "yank result does not have any traces attched" {:knitty/yank-result yank-result})))
+      (throw (ex-info "yank result does not have any traces attached" {:knitty/yank-result yank-result})))
     (let [tls (mapcat :tracelog ts)
           ev (fn [e] #(= (:event %) e))
           ybe (fn [e] (into #{} (comp (filter (ev e)) (map :yarn)) tls))
@@ -176,22 +208,9 @@
 
 
 (defn yank-explain!
-  "Run `knitty.core/yank` with tracing enabled, await (synchonously) result
-   and return nn extra information for debugging and testing.
-
-   Result is dictionary with:
-   - :ok?      boolean, true when `yank` resulted with no error
-   - :result   yank* result or thrown exception
-   - :traces   list of yank traces
-   - :yanked   set of yanked nodes
-   - :failed   set of failed nodes (with an exception)
-   - :called   set of computed nodes
-   - :leaked   set of leaked nodes (started but not completed yet)
-   - :depend   graph of direct dependencies (adjacency list, includes unused lazy deps)
-   - :depend*  graph of indirect (all) dependencies
-   - :use      graph of direct node usages (adjacency list, does not include unused lazy deps)
-   - :use*     graph of indirect node usages
-   "
+  "Runs `kt/yank` with tracing enabled, waits synchronously for the result, and returns
+   additional diagnostic information for debugging and testing.
+   See `explain-yank-result` for information about the returned value."
   ([inputs yarns]
    (yank-explain! inputs yarns nil))
   ([inputs yarns opts]

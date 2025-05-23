@@ -1,4 +1,5 @@
 (ns knitty.core
+  "Core functionalities of the Knitty system."
   (:require [clojure.spec.alpha :as s]
             [knitty.deferred :as kd]
             [knitty.impl :as impl]
@@ -108,7 +109,7 @@
          ~k)))
 
 
-(defn bind-yarn
+(defn link-yarn!
   "Redeclares a Yarn as a symlink to the `yarn-target`."
   [yarn yarn-target]
   {:pre [(qualified-keyword? yarn)
@@ -169,7 +170,15 @@
 
 (defmacro yarn
   "Returns a Yarn object (without registering it into the global registry).
-   May capture variables from the outer scope."
+   May capture variables from the outer scope. Supports the same set of binding flags
+   as `defyarn` (e.g., :defer, :lazy, :maybe, :case, :fork).
+
+     (defyarn input)
+     @(yank
+        {input 1}
+        [(yarn ::output {x input} (+ x 1))])
+     ;; => {::input 1, ::output 2}
+   "
   [k & exprs]
   (if (empty? exprs)
     (impl/gen-yarn-input k)
@@ -187,28 +196,64 @@
 
 
 (defmacro defyarn
-  "Defines a Yarn, which is a computation node in Knitty. The Yarn is identified by a qualified keyword
-   generated using the current namespace and the provided name. This macro allows you to define Yarns
-   with optional dependencies and computation logic.
+  "Defines a Yarn (a computation node in Knitty) and registers it in the global registry.
+
+   A Yarn is identified by a qualified keyword derived from the current namespace and the given name.
+   This macro supports multiple forms and binding modes to declare dependencies and control evaluation.
+
+     (defyarn yarn-name)
+     (defyarn yarn-name \"documentation\")
+     (defyarn yarn-name {bind-name dep-yarn-name, ...} & body)
+     (defyarn yarn-name \"documentation\" {bind-name dep-yarn-name, ...} & body)
+
+   In the optional dependency binding map, each binding can be annotated with meta flags that control
+   how the dependency is resolved and bound to a local variable:
+   - `:sync`    Synchronous value; Knitty automatically awaits the dependent node if needed.
+   - `:defer`   Deferred, which will be resolved to the node value; no awaiting happens.
+   - `:lazy`    Delay-like object, which will return a deferred on deref; the dependent node computation starts after the first deref.
+   - `:case`    1-arg function that dynamically routes to the specified yarn and returns a deferred.
+   - `:maybe`   Dependency as deferred, but does not start computation if its node; may never resolve (!!!) if no other nodes depend on it.
+
+   The additional meta flag :fork on bindings instructs Knitty to spawn a new FJP task to
+   compute the dependent node (if it was not started before).
+
+   Metadata on the yarn name (or binding map) may also contain:
+   - `:spec`           Instructs 'defyarn' to automatically register the defined clojure-spec on ::yarn-key.
+   - `:fork`           Runs the node via FJP fork.
+   - `:reorder-deps`   Reorders yarn dependencies based on their definition order (default true).
 
    Examples:
 
-   ```clojure
-   ;; declare ::yarn-1 without a body
-   (defyarn yarn-1)
+     (defyarn ^{:spec number?} in-node \"input node\")
 
-   ;; declare ::yarn-2 with a docstring
-   (defyarn yarn-2 \"documentation\")
+     (defyarn node2 {}
+       (println \"compute node2\")
+       0)
 
-   ;; define ::yarn-3 without any inputs
-   (defyarn yarn-3 {} (rand-int 10))
+     (defyarn work-node
+       \"yarn documentation\"
+       ^{:spec number?
+         :fork true}
+       {        x in-node
+        ^:defer y in-node
+        ^:lazy  z in-node
+        ^:case  f1 {1 in-node, 2 node2}
+        ^:case  f2 #{in-node, node2}
+        ^:maybe m node2
+       }
+       (assert (number? x))
+       (assert (kd/deferred? y))
+       (assert (kd/deferred? @z))
+       (assert (every? fn? [f1 f2]))
+       (assert (kd/deferred? (f1 1)))
+       (assert (kd/deferred? (f2 ::in-node)))
+       (assert (kd/deferred? m))
+       ::ok
+      )
 
-   ;; define ::yarn-4 with inputs
-   (defyarn yarn-4 {x yarn-3} (str \"Random is \" x))
-   ```
+     @(yank {in-node 1} [work-node])
+     ;; => {::in-node 1, ::work-node ::ok}
   "
-  {:arglists '([name docstring?]
-               [name docstring? [dependencies*] & body])}
   [name & doc-binds-body]
   (let [bd (cons name doc-binds-body)
         cf (conform-and-check ::defyarn bd)
@@ -276,15 +321,15 @@
   `(if (contains? ~opts ~key) (~key ~opts) ~default))
 
 (defn yank*
-  "Computes missing nodes. Always returns deferred resolved into YankResult.
-   YankResult implements ILookup, Seqable, IObj, IKVReduce and IReduceInit.
+  "Computes missing nodes. Always returns a deferred resolved to a YankResult.
+   YankResult implements ILookup, Seqable, IObj, IKVReduce, IReduceInit.
 
-   Optinans are:
-    - `:executor` a instance of `java.util.concurrent.Executor` which is used to run code;
-    - `:preload`  preload all values from input map;
-    - `:bindings` flag, indicating that thread-local bindings should be captured and installed for yarns;
-    - `:tracing`  flag, do we need to capture tracing (introduce some perfomance penalties);
-    - `:registry` a knitty registry with avalable yarns, usefull for mocking code.
+   Options are:
+    - `:executor`  An instance of `java.util.concurrent.Executor` used to run code.
+    - `:preload`   Preloads all values from the input map.
+    - `:bindings`  A flag indicating that thread-local bindings should be captured and installed for yarns.
+    - `:tracing`   A flag indicating whether to capture tracing (introduces some performance penalty).
+    - `:registry`  A Knitty registry with available yarns, useful for mocking code.
   "
   ([inputs yarns]
    (yank* inputs yarns nil))
@@ -317,16 +362,16 @@
 
 
 (defn yr->map
-  "Transforms result of `yank*` into persistent map."
+  "Converts the result of `yank*` into a persistent map."
   [yr]
   (cond
     (instance? knitty.javaimpl.YankResult yr) (.toAssociative ^knitty.javaimpl.YankResult yr)
     (map? yr) yr
-    :else (throw (ex-info "invalid yank-result" {:knitty/invalid-result yr}))))
+    :else (throw (ex-info "Invalid yank-result" {:knitty/invalid-result yr}))))
 
 
 (defmacro yank
-  "Computes and adds missing nodes into 'inputs' map. Always returns deferred."
+  "Computes and adds missing nodes to the 'inputs' map. Always returns a deferred."
   ([inputs yarns]
    `(yank ~inputs ~yarns nil))
   ([inputs yarns & {:as opts}]
@@ -338,12 +383,12 @@
 
 (defmacro yank1
   "Computes and returns a single node.
-   Intended to be used in REPL sessions where there is needed to pick just a single yarn value.
-   Tracing is disabled, use wrapped `yank*` if you need it.
+   Intended to be used in REPL sessions where you need to retrieve just a single yarn value.
+   Tracing is disabled; use the wrapped `yank*` if you need it.
 
    Logically similar to:
 
-       (md/chain (yank inputs [::yarn-key]) ::yarn-key)
+     (md/chain (yank inputs [::yarn-key]) ::yarn-key)
    "
   ([inputs yarns]
    `(yank1 ~inputs ~yarns nil))
@@ -360,7 +405,7 @@
 
 
 (defn yank-error?
-  "Checks if an exception was rethrown by a `yank` function."
+  "Returns true if the exception was rethrown by a `yank` function."
   [ex]
   (:knitty/yank-error? (ex-data ex) false))
 

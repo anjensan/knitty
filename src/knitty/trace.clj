@@ -1,4 +1,7 @@
 (ns knitty.trace
+  "Provides functions for tracing yarn execution, parsing trace records,
+   and merging/retreiving trace data. This namespace is used to capture and
+   analyze detailed execution traces of yarn operations."
   (:require [clojure.set :as set]
             [knitty.deferred :as kd]
             [clojure.string :as str]
@@ -15,7 +18,7 @@
     (let [s' (str/lower-case s)]
       (cond
         (#{"1" "true" "yes" "y"} s') true
-        (#{"0" "false" "no", "n"} s') false
+        (#{"0" "false" "no" "n"} s') false
         :else (do (log/warnf "Invalid bool flag %s - %s" fname s) nil)))))
 
 
@@ -27,13 +30,17 @@
 
 
 (defmacro if-tracing
+  "Evaluates `trace-body` if tracing is enabled; otherwise, evaluates `notrace-body` if provided."
   ([trace-body]
    (when-not elide-tracing? trace-body))
   ([trace-body notrace-body]
    (if elide-tracing? notrace-body trace-body)))
 
 
-(definterface Tracer
+(definterface
+  ^{:doc
+    "Tracer defines the interface for capturing and processing yarn execution traces."}
+  Tracer
   (traceStart [yk kind deps])
   (traceCall [yk])
   (traceFinish [yk value error async])
@@ -42,8 +49,30 @@
   (captureTrace []))
 
 (deftype TraceLogCons [yarn event value next])
-(defrecord TraceLog [yarn event value])
-(defrecord Trace [at base-at done-at result yarns tracelog])
+
+(defrecord
+ ^{:doc
+   "Represents a single trace log entry capturing an event for a yarn.
+    Fields:
+    - :yarn   identifier of the yarn associated with this log entry.
+    - :event  type of event that occurred (e.g., trace start, call, finish).
+    - :value  value or timestamp related to the event."}
+ TraceLog
+ [yarn event value])
+
+
+(defrecord
+ ^{:doc
+   "Represents a complete trace record aggregating the execution details of a yarn.
+    Fields:
+    - :at        initial timestamp when the trace was recorded.
+    - :base-at   base reference time used for relative time calculations.
+    - :done-at   timestamp when the trace recording was completed.
+    - :result    result or output produced by the traced yarn.
+    - :yarns     a collection of yarn identifiers involved in the trace.
+    - :tracelog  a sequence of TraceLog entries that detail individual events in the yarn's lifecycle."}
+ Trace
+ [at base-at done-at result yarns tracelog])
 
 
 (defmethod print-method Trace
@@ -69,7 +98,9 @@
          (recur (.get ~a))))))
 
 
-(defn tracelog->seq [^TraceLogCons t]
+(defn- tracelog->seq
+  "Converts a TraceLogCons linked list into a lazy sequence of TraceLog records."
+  [^TraceLogCons t]
   (lazy-seq
    (when t
      (cons (TraceLog. (.-yarn t) (.-event t) (.-value t))
@@ -116,7 +147,9 @@
 
 (def ^:private ^AtomicLong yank-cnt (AtomicLong.))
 
-(defn create-tracer [input yarns]
+(defn create-tracer
+  "Creates a new tracer instance for recording yarn execution traces."
+  [input yarns]
   (if-tracing
     (let [store (AtomicReference.)
           extra {:at (java.util.Date.)
@@ -127,10 +160,13 @@
       (TracerImpl. store extra))))
 
 
-(defn capture-trace! [t]
+(defn capture-trace!
+  "Captures and returns trace data from the given tracer instance created with `create-tracer`.
+   Returns the captured Trace record, or nil if tracing is disabled."
+  [t]
   (if-tracing
-   (when t
-     (.captureTrace ^Tracer t))))
+    (when t
+      (.captureTrace ^Tracer t))))
 
 
 (defn- safe-minus [a b]
@@ -141,7 +177,9 @@
         (- a b)))))
 
 
-(defn parse-trace [t]
+(defn parse-trace
+  "Parses a trace record and extracts relevant timing and dependency information."
+  [t]
   (let [{:keys [at base-at done-at input tracelog yankid yarns]} t
 
         yanked? (set yarns)
@@ -301,11 +339,19 @@
      }))
 
 
-(defn merge-parsed-traces [gs]
+(defn merge-parsed-traces
+  "Merges a collection of parsed trace data maps into a single aggregated trace."
+  [gs]
   (reduce merge-two-parsed-traces nil (reverse gs)))
 
 
-(defn find-traces* [poy]
+(defn find-traces*
+  "Recursively extracts trace data from the given input `poy`.
+
+   If `poy` is a deferred value, the function recursively binds until the trace data is available.
+   It inspects the input's metadata, ex-data, or its structure to locate the `:knitty/trace` key.
+  "
+  [poy]
   (if (kd/deferred? poy)
     (kd/bind poy find-traces* find-traces*)
     (or
@@ -319,6 +365,9 @@
      )))
 
 
-(defn find-traces [poy]
+(defn find-traces
+  "Recursively extracts trace data from the given input `poy`.
+   Function blocks when provided values is deferred."
+  [poy]
   (when-let [t (find-traces* poy)]
     (if (kd/deferred? t) @t t)))

@@ -2,6 +2,17 @@
 (KnittyLoader/touch)
 
 (ns knitty.deferred
+  "Provides asynchronous programming support for Knitty.
+
+  This namespace integrates Knitty's asynchronous operations with the Manifold deferred library.
+  It supplies functions and macros to create, manage, and compose Knitty deferreds (KDeferred),
+  wrap values and errors, construct custom executor pools, and implement asynchronous control flows
+  (such as future, loop, while, bind, and zip operations). This integration enables efficient and
+  composable asynchronous computations within the Knitty system.
+
+  Note:
+    Core functions like `future`, `future-call`, `run!`, `while`, `reduce`, and `loop` are excluded
+    from clojure.core in favor of custom implementations provided here."
   (:refer-clojure :exclude [future future-call run! while reduce loop])
   (:require
    [clojure.core :as c]
@@ -36,6 +47,20 @@
           w)))))
 
 (defn build-fork-join-pool
+  "Creates and returns a new Java ForkJoinPool instance with custom configuration.
+
+  Options (all keys are optional):
+  - :parallelism         - Number of worker threads (default: available processors)
+  - :factory             - Custom ForkJoinWorkerThreadFactory (default: internal factory with name prefix)
+  - :factory-prefix      - String prefix for thread names (default: \"knitty-fjp\")
+  - :exception-handler   - Function (fn [thread exception]) to handle uncaught exceptions in pool threads
+  - :max-size            - Maximum pool size (default: 32768)
+  - :min-size            - Minimum pool size (default: 0)
+  - :saturate            - Predicate function (fn [pool]) to determine if pool is saturated
+  - :keep-alive-seconds  - Idle thread keep-alive time in seconds (default: 60)
+  - :min-runnable        - Minimum number of runnable threads (default: 1)
+  - :async-mode          - If true, uses async mode for task scheduling (default: false)
+  "
   ^ForkJoinPool
   [{:keys [parallelism
            factory
@@ -136,7 +161,7 @@
 (defn wrap*
   "Corece `x` into an instance of Knitty deferred.  Converts non-deferred futures with `manifold.deferred/->deferred`."
   ^KDeferred [x]
-  (if-some [y (manifold.deferred/->deferred x nil)]
+  (if-some [y (md/->deferred x nil)]
     (wrap y)
     (wrap-val x)))
 
