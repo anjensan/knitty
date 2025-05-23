@@ -1,9 +1,8 @@
 (ns knitty.impl
+  "Provides internal implementation functions and types for the Knitty system."
   (:require [clojure.set :as set]
             [knitty.deferred :as kd]
-            [knitty.trace :as t]
-            [manifold.executor]
-            [manifold.utils])
+            [knitty.trace :as t])
   (:import [clojure.lang AFn]
            [java.util Arrays]
            [knitty.javaimpl
@@ -355,8 +354,8 @@
   [ykey bind expr opts]
   (KwMapper/registerKeyword ykey)
   (let [deps (grab-yarn-bindmap-deps bind)
-        {:keys [keep-deps-order]} opts
-        bind (if keep-deps-order
+        {:keys [reorder-deps] :or {reorder-deps true}} opts
+        bind (if reorder-deps
                bind
                (sort-by (comp #(when (keyword? %) (KwMapper/registerKeyword %)) second) bind))]
     (emit-yarn-impl expr ykey bind opts deps)))

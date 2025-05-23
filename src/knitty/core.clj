@@ -1,4 +1,5 @@
 (ns knitty.core
+  "Core functionalities of the Knitty system."
   (:require [clojure.spec.alpha :as s]
             [knitty.deferred :as kd]
             [knitty.impl :as impl]
@@ -169,7 +170,15 @@
 
 (defmacro yarn
   "Returns a Yarn object (without registering it into the global registry).
-   May capture variables from the outer scope."
+   May capture variables from the outer scope. Supports the same set of binding flags
+   as `defyarn` (e.g., :defer, :lazy, :maybe, :case, :fork).
+
+     (defyarn input)
+     @(yank
+        {input 1}
+        [(yarn ::output {x input} (+ x 1))])
+     ;; => {::input 1, ::output 2}
+   "
   [k & exprs]
   (if (empty? exprs)
     (impl/gen-yarn-input k)
@@ -187,28 +196,64 @@
 
 
 (defmacro defyarn
-  "Defines a Yarn, which is a computation node in Knitty. The Yarn is identified by a qualified keyword
-   generated using the current namespace and the provided name. This macro allows you to define Yarns
-   with optional dependencies and computation logic.
+  "Defines a Yarn - a computation node in Knitty and registers it into the global registry.
+
+   A Yarn is identified by a qualified keyword derived from the current namespace and the given name.
+   This macro supports multiple forms and binding modes to declare dependencies and control evaluation.
+
+     (defyarn yarn-name)
+     (defyarn yarn-name \"documentation\")
+     (defyarn yarn-name {bind-name dep-yarn-name, ...} & body)
+     (defyarn yarn-name \"documentation\" {bind-name dep-yarn-name, ...} & body)
+
+   In the optional dependency binding map, each binding can be annotated with meta flags that control
+   how the dependency is resolved and binded to a local variable:
+   - :sync    synchonouse value, knitty automatically awaits dependant node if needed;
+   - :defer   deffered, which will be resolved to node value, no awaiting is happening;
+   - :lazy    delay-like object, which will return deferred on deref; dependen node computation started after first deref;
+   - :case    1-arg function which dynamically route to specified yarn and returns deferred;
+   - :maybe   depenency as deferred, but not start computation if its node, may never resolve (!!!) if no other nodes will depend on it;
+
+   Addition meta flag :fork on bindings instructs Knitty to use spawn new FJP task to
+   compute dependent node (if it was not started before).
+
+   Metadata on yarn name (or binding map) also may contain:
+   - :spec           instruct 'defyarn' to automatically register defined clojure-spec on ::yarn-key;
+   - :fork           run node in via FJP fork.
+   - :reorder-deps   reoder yarn deps based on their definition order (default true).
 
    Examples:
 
-   ```clojure
-   ;; declare ::yarn-1 without a body
-   (defyarn yarn-1)
+    (defyarn ^{:spec number?} in-node \"input node\")
 
-   ;; declare ::yarn-2 with a docstring
-   (defyarn yarn-2 \"documentation\")
+    (defyarn node2 {}
+      (println \"compute node2\")
+      0)
 
-   ;; define ::yarn-3 without any inputs
-   (defyarn yarn-3 {} (rand-int 10))
+    (defyarn work-node
+      \"yarn documentation\"
+      ^{:spec number?}
+      ^:fork
+      {        x in-node
+       ^:defer y in-node
+       ^:lazy  z in-node
+       ^:case  f1 {1 in-node, 2 node2}
+       ^:case  f2 #{in-node, node2}
+       ^:maybe m node2
+      }
+      (assert (number? x))
+      (assert (kd/deferred? y))
+      (assert (kd/deferred? @z))
+      (assert (every? fn? [f1 f2]))
+      (assert (kd/deferred? (f1 1)))
+      (assert (kd/deferred? (f2 ::in-node)))
+      (assert (kd/deferred? m))
+      ::ok
+     )
 
-   ;; define ::yarn-4 with inputs
-   (defyarn yarn-4 {x yarn-3} (str \"Random is \" x))
-   ```
+    @(yank {in-node 1} [work-node])
+    ;; => {::in-node 1, ::work-node ::ok}
   "
-  {:arglists '([name docstring?]
-               [name docstring? [dependencies*] & body])}
   [name & doc-binds-body]
   (let [bd (cons name doc-binds-body)
         cf (conform-and-check ::defyarn bd)
@@ -280,11 +325,11 @@
    YankResult implements ILookup, Seqable, IObj, IKVReduce and IReduceInit.
 
    Optinans are:
-    - `:executor` a instance of `java.util.concurrent.Executor` which is used to run code;
-    - `:preload`  preload all values from input map;
-    - `:bindings` flag, indicating that thread-local bindings should be captured and installed for yarns;
-    - `:tracing`  flag, do we need to capture tracing (introduce some perfomance penalties);
-    - `:registry` a knitty registry with avalable yarns, usefull for mocking code.
+    - `:executor`  a instance of `java.util.concurrent.Executor` which is used to run code;
+    - `:preload`   preload all values from input map;
+    - `:bindings`  flag, indicating that thread-local bindings should be captured and installed for yarns;
+    - `:tracing`   flag, do we need to capture tracing (introduce some perfomance penalties);
+    - `:registry`  a knitty registry with avalable yarns, usefull for mocking code.
   "
   ([inputs yarns]
    (yank* inputs yarns nil))

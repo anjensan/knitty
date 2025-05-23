@@ -1,7 +1,19 @@
+
 (import 'knitty.javaimpl.KnittyLoader)
 (KnittyLoader/touch)
 
 (ns knitty.deferred
+  "Provides asynchronous programming support for Knitty.
+
+  This namespace integrates Knitty's asynchronous operations with the Manifold deferred library.
+  It supplies functions and macros to create, manage, and compose Knitty deferreds (KDeferred),
+  wrap values and errors, construct custom executor pools, and implement asynchronous control flows
+  (such as future, loop, while, bind, and zip operations). This integration enables efficient and
+  composable asynchronous computations within the Knitty system.
+
+  Note:
+    Core functions like `future`, `future-call`, `run!`, `while`, `reduce`, and `loop` are excluded
+    from clojure.core in favor of custom implementations provided here."
   (:refer-clojure :exclude [future future-call run! while reduce loop])
   (:require
    [clojure.core :as c]
