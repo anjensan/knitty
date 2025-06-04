@@ -88,6 +88,7 @@
        :value dd
        :defer ff)))
 
+   #_{:clj-kondo/ignore [:invalid-arity]}
    (testing :knitty
      (bench-suite
       (tmpl/do-template
@@ -109,23 +110,23 @@
       (tmpl/do-template
        [t d]
        (testing t
-         (bench :chain-in-x1  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 1  (md/chain' f)))))
-         (bench :chain-in-x2  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 2  (md/chain' f)))))
-         (bench :chain-in-x3  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 3  (md/chain' f)))))
-         (bench :chain-in-x5  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 5  (md/chain' f))))))
+         (bench :chain-in-x1  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 1 (md/chain' f)))))
+         (bench :chain-in-x2  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 2 (md/chain' f)))))
+         (bench :chain-in-x3  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 3 (md/chain' f)))))
+         (bench :chain-in-x5  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 5 (md/chain' f))))))
        :value dd
        :defer ff)))
 
+   #_{:clj-kondo/ignore [:invalid-arity]}
    (testing :knitty
      (bench-suite
       (tmpl/do-template
        [t d]
-       #_{:clj-kondo/ignore [:invalid-arity]}
        (testing t
-         (bench :chain-in-x1  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 1  (kd/bind f)))))
-         (bench :chain-in-x2  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 2  (kd/bind f)))))
-         (bench :chain-in-x3  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 3  (kd/bind f)))))
-         (bench :chain-in-x5  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 5  (kd/bind f))))))
+         (bench :chain-in-x1  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 1 (kd/bind f)))))
+         (bench :chain-in-x2  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 2 (kd/bind f)))))
+         (bench :chain-in-x3  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 3 (kd/bind f)))))
+         (bench :chain-in-x5  @(with-defer (let [f #(d (ninl-inc %))] (apply-replicate-arg (-> (d 0)) 5 (kd/bind f))))))
        :value dd
        :defer ff)))))
 
@@ -133,7 +134,6 @@
 (deftest ^:benchmark benchmark-chain-err
   (do-mode-futures
 
-   #_{:clj-kondo/ignore [:invalid-arity]}
    (tmpl/do-template
     [t1 t2 d bind bind-err]
     (testing t1

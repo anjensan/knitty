@@ -96,12 +96,13 @@
                          (kd/future (+ x x y z))))))
 
   (is (= 2
-         @(let [d (kd/create)]
-            (kd/let-bind [[x] (future' [1])]
-                         (kd/join
-                          (kd/let-bind [[x'] (future' [(inc x)])
-                                        y (future' true)]
-                                       (when y x'))))))))
+         @(kd/let-bind [[x] (future' [1])]
+                       (kd/join
+                        (kd/let-bind [[x'] (future' [(inc x)])
+                                      y (future' true)]
+                                     (when y x'))))))
+
+  )
 
 
 (deftest test-chain-errors
@@ -300,7 +301,7 @@
       (is (= ex @(capture-error
                   (kd/while (future-error ex)))))
       (is (= ex @(capture-error
-                  (kd/while (future-error ex) (do)))))
+                  (kd/while (future-error ex) nil))))
       (is (= ex @(capture-error
                   (kd/while true (future-error ex)))))))
 
