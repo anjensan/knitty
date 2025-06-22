@@ -21,7 +21,7 @@
    [manifold.deferred :as md]
    [manifold.executor :as ex])
   (:import
-   [clojure.lang IFn Var]
+   [clojure.lang Agent IFn Var]
    [java.util.concurrent
     Executor
     ForkJoinPool
