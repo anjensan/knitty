@@ -178,7 +178,7 @@
 (defn future-call
   "Equivalent to `clojure.core/future-call`, but returns a Knitty deferred."
   (^KDeferred [^IFn f]
-   (future-call *executor* f))
+   (future-call Agent/soloExecutor f))
   (^KDeferred [^Executor executor ^IFn f]
    (let [frame (Var/cloneThreadBindingFrame)
          d (create)]
