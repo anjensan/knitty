@@ -3,7 +3,7 @@
   :url "https://github.com/anjensan/knitty"
   :license {:name "MIT License" :url "http://opensource.org/licenses/MIT"}
 
-  :dependencies [[org.clojure/clojure "1.12.0"]
+  :dependencies [[org.clojure/clojure "1.12.2"]
                  [manifold/manifold "0.4.3"]
                  [org.hdrhistogram/HdrHistogram "2.2.2"]
                  [macroz/tangle "0.2.2"]]
@@ -34,7 +34,7 @@
 
   :profiles {:dev {:dependencies [[criterium/criterium "0.4.6"]
                                   [prismatic/plumbing "0.6.0"]
-                                  [clj-kondo/clj-kondo "2025.04.07"]]
+                                  [clj-kondo/clj-kondo "2025.07.28"]]
                    :injections [(require 'knitty.test-util)]}
              :prof {:jvm-opts ["-Djdk.attach.allowAttachSelf" "-XX:+UnlockDiagnosticVMOptions" "-XX:+DebugNonSafepoints"]
                     :dependencies [[com.clojure-goes-fast/clj-async-profiler "1.6.2"]]}}
