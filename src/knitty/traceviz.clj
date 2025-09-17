@@ -310,7 +310,7 @@
   [yank-result-or-trace & {:as options}]
   (binding [*options* (into *options* options)]
     (when-let [g (maybe-parse-traces yank-result-or-trace)]
-      (case (:format *options*)
+      (case (or (:format *options*) :raw)
         :raw g
         :edn (pr-str g)
         :dot (render-tracegraph-dot g)
