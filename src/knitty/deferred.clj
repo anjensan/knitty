@@ -232,7 +232,7 @@
   `(KDeferred/unwrap1 ~x))
 
 (definline unwrap
-  "Unwraps deferred (once). Returns realized value or the deferred itself."
+  "Unwraps deferred. Returns realized value or the deferred itself."
   [x]
   `(KDeferred/unwrap ~x))
 

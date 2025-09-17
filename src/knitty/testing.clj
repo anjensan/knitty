@@ -51,7 +51,7 @@
   "Creates a mock registry based on the given real registry and a mapping function.
   The mock registry will use `yarn-key->mock-yarn` to override yarns when present; otherwise, it
   delegates to the real registry.
-"
+  "
   [registry yarn-key->mock-yarn]
   (MockRegistry. yarn-key->mock-yarn registry))
 
