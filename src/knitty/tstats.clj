@@ -266,7 +266,7 @@
                                                   :percentiles percentiles})
                    (partial windowed-stats-tracker {:precision precision
                                                     :window window
-                                                    :window-chunk (or window-chunk (long (* 0.125 window)))
+                                                    :window-chunk (or window-chunk (long (* 0.05 window)))
                                                     :percentiles percentiles})))]
     (fn
       ([]
