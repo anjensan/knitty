@@ -287,7 +287,6 @@
          spec (:spec m)]
      (list
       `do
-      `(when-let [f# (get *registry* ~k)] (println ">>>>" (f#)))
       (when spec `(s/def ~k ~spec))
       `(register-yarn ~my)
       `(def ~name ~k)))))
