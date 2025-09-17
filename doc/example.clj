@@ -5,7 +5,7 @@
            defyarn-method defyarn-multi  ;; polimorphic nodes (via clojure multimethods)
            declare-yarn                  ;; predeclare computation node
            yarn                          ;; create dynamic computation node (for mocks)
-           bind-yarn                     ;; symlink nodes (use in conjuction with declare-yarn)
+           link-yarn!                    ;; symlink nodes (use in conjunction with declare-yarn)
            yank                          ;; run computation graph & return all nodes
            yank1                         ;; run computation graph & return only one node
            ]])
@@ -158,7 +158,7 @@
   (+ x y))
 
 ;; redefine node `::five` as symlink to `::five-impl`
-(bind-yarn five five-impl)
+(link-yarn! five five-impl)
 
 ;; not we can execute graph
 @(yank {} [five])  ;; => #:user{:one-slow 1, :two 2, ...}
