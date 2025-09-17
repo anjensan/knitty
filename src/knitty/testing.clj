@@ -7,14 +7,15 @@
    [knitty.impl :as impl]
    [knitty.trace :as t])
   (:import [clojure.lang AFn]
-           [knitty.javaimpl KwMapper YarnProvider]))
+           [knitty.javaimpl YarnProvider]))
 
-
-(deftype MockRegistry [mock-yarn-fn real-registry]
+(deftype MockRegistry 
+         [^clojure.lang.IFn mock-yarn-fn 
+          ^YarnProvider real-registry]
 
   YarnProvider
-  (yarn [_ kkw] (or (mock-yarn-fn kkw) (.yarn ^YarnProvider real-registry kkw)))
-  (ycache [_] (make-array AFn (.maxIndex (KwMapper/getInstance))))
+  (yarn [_ kkw] (or (mock-yarn-fn kkw) (.yarn real-registry kkw)))
+  (ycache [_] (make-array AFn (alength (.ycache real-registry))))
 
   clojure.lang.Seqable
   (seq [_] (map
