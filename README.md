@@ -2,7 +2,7 @@
 
 
 Knitty is a library for declarative definitions of how data should be computed and what dependencies exist between different pieces.
-Knitty assigns data computation functions to qualified keywords. Each such function explicitly declares all needed dependencies (also keywords). A user provides the initial data set as a map and requests what keys should be added — Knitty takes care of the rest: builds a dependency graph, checks for cycles, resolves [manifold.deferred](https://github.com/clj-commons/manifold/blob/master/doc/deferred.md), memoizes all values, applies tracing and profiling.
+Knitty assigns data computation functions to qualified keywords. Each such function explicitly declares all needed dependencies (also keywords). A user provides the initial data set as a map and requests what keys should be added — Knitty takes care of the rest: builds a dependency graph, checks for cycles, resolves deferred, memoizes all values, applies tracing and profiling.
 
 ```clojure
 (ns user
@@ -69,8 +69,7 @@ This information may be used for visualizations:
 ```clojure
 (require
   '[knitty.tracetxt :as ktt]
-  '[knitty.traceviz :as ktv]
-  )
+  '[knitty.traceviz :as ktv])
 
 (def m @(yank {node-a 1, node-b 10} [anode-x, anode-y, anode-z]))
 
@@ -89,7 +88,7 @@ This information may be used for visualizations:
 
 More examples and details can be found in the documentation:
 
-- [doc/core.md](doc/core.md) — getting started, core concepts.
+- [doc/basics.md](doc/basics.md) — getting started, core concepts.
 - [doc/advanced.md](doc/advanced.md) — multiyarns, optional dependencies, and registry tricks.
 - [doc/deferred.md](doc/deferred.md) — Knitty's deferred implementation and helpers.
 - [doc/testing.md](doc/testing.md) — fixtures, mocking yarns, and working with traces.

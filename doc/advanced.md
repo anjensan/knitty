@@ -1,7 +1,5 @@
 # Advanced features
 
-This document expands on the binding modes and registry tooling introduced in [doc/core.md](core.md).
-
 ### Weak dependencies (`^:maybe`)
 
 Sometimes you want to consume a dependency only if something else triggers it, without starting it yourself. Use the `^:maybe` binding to obtain a deferred that may remain unrealised.
@@ -29,7 +27,7 @@ Sometimes you want to consume a dependency only if something else triggers it, w
 ```
 
 Notes:
-- `^:maybe` returns a raw deferred; it may remain unresolved forever if nothing else needs the yarn.
+- `^:maybe` returns a raw deferred; it may remain unresolved forever.
 - Combine it with `md/timeout!` (or similar) if you need to handle the "never" case gracefully.
 - This flag is mostly useful for caches and instrumentation, not for routine control flow.
 

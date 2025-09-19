@@ -22,12 +22,11 @@ Most of the time you do not need to construct deferreds manually — Knitty runt
 ## Creating deferreds
 
 ```clojure
-(def empty-d     (kd/create))             ;; unrealised placeholder
-(def success-d   (kd/wrap 42))            ;; realised value, accepts IDeferred or plain values
-(def error-d     (kd/wrap-err (Exception.)))
-
-(def coerce-mf   (kd/wrap (md/future 1))) ;; convert a manifold future
-(def coerce-core (kd/wrap* (future 1)))   ;; accepts futures/promises via md/->deferred
+(def empty-d     (kd/create))                ;; unrealised placeholder
+(def success-d   (kd/wrap 42))               ;; realised value, accepts IDeferred or plain values
+(def error-d     (kd/wrap-err (Exception.))) ;; realised with an error
+(def coerce-mf   (kd/wrap (md/future 1)))    ;; convert a manifold future
+(def coerce-core (kd/wrap* (future 1)))      ;; accepts futures/promises via md/->deferred
 ```
 
 `kd/success!` and `kd/error!` mirror the Manifold helpers:

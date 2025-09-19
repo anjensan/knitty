@@ -41,7 +41,9 @@ Dependencies are described with an ordered map whose keys are local binding symb
    (/ t c))
 ```
 
-You can forward-declare placeholders using `declare-yarn`, then later `link-yarn!` them to a real implementation. See [doc/advanced.md](advanced.md) for details.
+You can forward-declare placeholders using `declare-yarn`.
+Then define then later `link-yarn!` them to a real implementation. 
+See [doc/advanced.md](advanced.md) for details.
 
 ## Pulling values with `yank`
 
@@ -79,7 +81,8 @@ Bindings accept metadata flags that control how Knitty obtains the dependency:
 | `^:case`  | Bind a single-argument routing function that selects a yarn from a map/set of options.      |
 | `^:fork`  | Run the dependency computation on a fresh ForkJoin task. Can be combined with `:defer`.     |
 
-Per-yarn metadata can also include `:fork` (run the body in a fork/join task), `:spec` (auto-register a spec for the yarn keyword), or `:reorder-deps` (preserve dependency declaration order when false).
+Per-yarn metadata can also include `:fork` (run the body in a fork/join task), `:spec` (auto-register a spec for the yarn keyword).
+When yarn is marked with
 
 ## Asynchronous results
 
@@ -136,7 +139,8 @@ If a yarn returns something that is not already a manifold deferred (e.g. a core
   {^:lazy x expensive}
   (if (< (rand) 0.5)
     -1
-    @x))
+    (x) ;; note - `(x)` returns deferred!
+    ))
 
 @(yank {} [maybe-use])
 ;; Prints "computing..." about half of the time.

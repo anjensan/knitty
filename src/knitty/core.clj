@@ -214,9 +214,6 @@
    - `:case`    1-arg function that dynamically routes to the specified yarn and returns a deferred.
    - `:maybe`   Dependency as deferred, but does not start computation if its node; may never resolve (!!!) if no other nodes depend on it.
 
-   The additional meta flag :fork on bindings instructs Knitty to spawn a new FJP task to
-   compute the dependent node (if it was not started before).
-
    Metadata on the yarn name (or binding map) may also contain:
    - `:spec`           Instructs 'defyarn' to automatically register the defined clojure-spec on ::yarn-key.
    - `:fork`           Runs the node via FJP fork.

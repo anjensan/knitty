@@ -24,34 +24,34 @@ and there is no need for an explicit "compile graph" stage, etc.
 Here is a bullet list of current thoughts and ideas that actually drive Knitty's design:
 
 When you see a pure data (in logs, message queue, document database) - it should be easy to recognize what code was responsible to produce that data.
-  - Natural way: use fully qualified keywords as IDs, where the namespace of the keyword matches the namespace with the code.
+  - Natural way: use fully qualified keywords as IDs, where the namespace of the keyword matches the namespace of the code.
 
-Values are computed only when are actually needed, nothing computes twice.
+Values are computed only when they are actually needed, nothing computes twice.
   - Memoization of values and computing values "on-demand"; laziness is natural for Clojure.
 
 Mutation is allowed only for short period of time, when data is fully produced - it must be immutable.
-  - Internally, the graph executes in a "mutable context" (and uses mutable structures under the hood); after completion, it must be just a persistent collection.
+  - A graph executes with a "mutable context" (uses mutable structures under the hood); after completion, it must be just a persistent collection.
 
 Should be a way to "extend" existing workflow without breaking it.
-  - Any computation nodes may be reused, but there should also be a way to hide some of them (as ^:private).
+  - Any computation node may be reused, but there should also be a way to hide some of them (as ^:private).
 
 Async is supported, but not enforced (or actually enforced, but to a minimum possible way that is just required to have a single api).
   - As the whole graph may be asynchronous, it is OK to return a deferred from the "entry point".
 
 Overhead should be small, especially for "fully synchonous graphs".
-  - In the core of the system, there should be a separate branch for the synchronous variant; ideally, it should be inlinable by the JIT.
+  - There should be a separate branch for the synchronous variant; ideally, it should be inlinable by a JIT.
 
 Development workflow should be REPL-friendly.
   - It should be easy to redefine any node in a graph from the REPL, ideally without any "graph full recompilation".
 
-Debugging and analyzing of existing graph:
+Debugging and analyzing of existing graph should be easy:
   - There must be a way to view/analyze what is actually happening with a graph at runtime (traces/logs).
 
 Support from editor/IDE (navigate to code used to produce value, highligh errors and warnings).
   - DSL vs Macros: DSLs are easy to create, but harder to check/validate in IDEs.
 
 Thread safety, "cheap" asynchronoucity.
-  - Developers should not need to deal with asynchrony directly when it is not needed; the library must take care of that as much as possible.
+  - Developers should not need to deal with concurrency directly when it is not needed.
 
 ## Limitations
 
@@ -77,8 +77,7 @@ Thread safety, "cheap" asynchronoucity.
 Here is an example of theoretical work with Knitty. Assume we are writing a web application and need to render a home page for a specific user. We already have functions with our business logic:
 
 ```clojure
-;; Let's assume we have a set of independent functions
-;; They are testable & composable, so no direct dependencies between them
+;; testable & composable, so no direct dependencies between them
 (defn parse-params [req] :...)
 (defn extract-user-id [params] :...)
 (defn fetch-user-by-id [user-id] :...)
@@ -102,7 +101,7 @@ Lets wire them with a traditional approach:
      :home-page home-page}))
 ```
 
-The function returns not a single value, but a map of all "steps"—easier to debug/test.
+The function returns not a single value, but a map of all "steps" — easier to debug/test.
 Order of execution is explicit and enforced by the Clojure compiler (you can't make a mistake by incorrectly reordering them).
 Everything is evaluated only once; looks good.
 
@@ -121,7 +120,7 @@ Lets try rewrite this with Knitty:
 
 It's harder to make a typo in resulting map keys. But overall, honestly, it does not look any better yet.
 
-And now lets imagine we need an API, so we need to add another way to render home-data. Assume we have
+And now lets imagine we need an API, so we require another way to render home-data. Assume we have
 ```clojure
 (defn render-home-page-for-api [user home-page-data api-format] :...)
 (defn extract-required-api-format [params] :...)
@@ -171,12 +170,12 @@ Let's see what we need to do with Knitty:
 (defyarn home-page-data {u user, s user-session} (compute-data-for-user-home-page u s))
 ```
 
-That's all. Also, it may be just reloaded via REPL—no need to touch code in other namespaces.
+That's all. Also, it may be just reloaded via REPL — no need to touch code in other namespaces.
 
 Now, finally, let's add another change. We realized that fetching the user and session takes too long,
 so let's update our code so they are loaded in parallel. If our functions with business logic
-return deferreds (our system is asynchronous), no updates are needed. If not, let's wrap calls to
-functions into deferreds (note: we need to use futures from Manifold or Knitty, not native ones):
+return deferreds (our system is asynchronous), no updates are needed. If not, let's wrap calls into
+deferreds (note: we need to use futures from Manifold or Knitty, not native ones):
 
 ```clojure
 (defyarn user-session   {ui user-id}             (kt/future (fetch-user-session-by-id ui)))
