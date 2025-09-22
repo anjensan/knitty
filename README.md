@@ -9,7 +9,12 @@ Knitty assigns data computation functions to qualified keywords. Each such funct
 
 Add dependency:
 
-[![Clojars Project](https://clojars.org/com.github.anjensan/knitty/latest-version.svg)](http://clojars.org/com.github.anjensan/knitty). 
+[![Clojars Project](https://clojars.org/com.github.anjensan/knitty/latest-version.svg)](http://clojars.org/com.github.anjensan/knitty)
+
+Or play with REPL:
+```bash
+clj -Sdeps '{:deps {com.github.anjensan/knitty {:mvn/version "0.7.0"}}}'
+```
 
 Require namespace:
 
@@ -32,13 +37,13 @@ Define a few "nodes of computation" with macro `defyarn`:
 Compute nodes by calling the function `yank`, passing values for input nodes as map:
 
 ```clojure
-@(yank {} [])                              ;; nothing to compute,
+@(yank {} [])                              ;; nothing to compute
 ;; => {}
 
-@(yank {node-a 1} [node-c])                ;; compute node-c base on node-a 
+@(yank {node-a 1} [node-c])                ;; compute node-c based on node-a 
 ;; => #:user{:node-a 1, :node-b 2, :node-c 3}
 
-@(yank {node-a 10, node-b 20} [node-c])    ;; noop, as node-c is already computed
+@(yank {node-a 10, node-b 20} [node-c])    ;; explicitly provide node-b 
 ;; => #:user{:node-a 10, :node-b 20, :node-c 30}
 ```
 
