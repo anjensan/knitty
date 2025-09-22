@@ -1,6 +1,8 @@
-# Knitty deferreds
+# Deferreds
 
-Knitty ships with a high-performance implementation of Manifold-style deferreds. They implement the same public protocols as `manifold.deferred` so they interoperate with the rest of the Manifold ecosystem, but are optimised for Knitty's execution engine and tracing.
+Knitty ships with a high-performance implementation of Manifold-style deferreds. 
+They implement the same public protocols as `manifold.deferred` so they interoperate 
+with the rest of the Manifold ecosystem, but are optimised for Knitty's usage.
 
 Key differences compared to stock Manifold deferreds:
 
@@ -8,8 +10,10 @@ Key differences compared to stock Manifold deferreds:
 - Callbacks form a *trident stack*, executing in reverse registration order (similar to `CompletableFuture`).
 - Error-leak detection is always enabled (Manifold samples errors by default).
 - Executors are associated with individual callbacks instead of being stored on each deferred.
-- Fast path for synchronous values (no unnecessary boxing or scheduler hand-offs).
-- A single unwrap step is performed when chaining (`bind` mirrors Manifold's `'` variants).
+- A single unwrap step is performed when chaining `bind*`.
+- There is no automatic coercion from blocking futures/etc to manifold deferreds.
+
+Usually Knitty deferreds are faster than Manifold, see [benchmark results](doc/bench-results.ipynb).
 
 Most of the time you do not need to construct deferreds manually — Knitty runtime does that for you — but the helpers in `knitty.deferred` are handy when integrating external asynchronous APIs or writing custom utilities.
 

@@ -1,4 +1,4 @@
-# Knitty basics
+# Basics
 
 Knitty is a dependency-aware computation engine for Clojure. You describe individual computations (called *yarns*), declare their dependencies, and ask Knitty to "yank" the values you need. Knitty builds a DAG, memoises intermediate results, resolves asynchronous values, and can attach detailed execution traces along the way.
 
@@ -167,9 +167,3 @@ Errors thrown inside a yarn become errors on the resulting deferred. You can com
 ```
 
 For more complex flows you can rely on `md/alt`, `md/zip`, or the helpers in `knitty.deferred`.
-
-## Next steps
-
-* [doc/advanced.md](advanced.md) — multiyarns, dynamic routing, optional dependencies, and registry tricks.
-* [doc/deferred.md](deferred.md) — documentation for Knitty’s deferred implementation and helpers.
-* [doc/testing.md](testing.md) — utilities for mocking yarns, capturing traces, and aggregating timing statistics.
