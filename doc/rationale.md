@@ -1,4 +1,4 @@
-# Knitty - Rationale
+# Rationale
 
 ## Iteration 0
 
@@ -78,11 +78,11 @@ Here is an example of theoretical work with Knitty. Assume we are writing a web 
 
 ```clojure
 ;; testable & composable, so no direct dependencies between them
-(defn parse-params [req] :...)
-(defn extract-user-id [params] :...)
-(defn fetch-user-by-id [user-id] :...)
-(defn compute-data-for-user-home-page [user session] :...)
-(defn render-data-for-user-home-page [user home-page-data] :...)
+(defn parse-params [req] ::params)
+(defn extract-user-id [params] 123)
+(defn fetch-user-by-id [user-id] {:name "User", :id user-id})
+(defn compute-data-for-user-home-page [user] {:name (:name user)})
+(defn render-data-for-user-home-page [home-page-data] (pr-str home-page-data))
 ```
 
 Lets wire them with a traditional approach:
@@ -93,7 +93,7 @@ Lets wire them with a traditional approach:
         user-id        (extract-user-id params)
         user           (fetch-user-by-id user-id)
         home-page-data (compute-data-for-user-home-page user)
-        home-page      (render-data-for-user-home-page user home-page-data)]
+        home-page      (render-data-for-user-home-page home-page-data)]
     {:params params
      :user-id user-id
      :user user
@@ -107,12 +107,14 @@ Everything is evaluated only once; looks good.
 
 Lets try rewrite this with Knitty:
 ```clojure
+(require '[knitty.core :refer [defyarn yank]])
+
 (defyarn req)
-(defyarn params         {r req}                     (parse-params r))
-(defyarn user-id        {p params}                  (extract-user-id p))
-(defyarn user           {ui user-id}                (fetch-user-by-id ui))
-(defyarn home-page-data {ui user-id}                (compute-data-for-user-home-page u))
-(defyarn home-page      {u user, d home-page-data}  (render-data-for-user-home-page u d))
+(defyarn params         {r req}               (parse-params r))
+(defyarn user-id        {p params}            (extract-user-id p))
+(defyarn user           {ui user-id}          (fetch-user-by-id ui))
+(defyarn home-page-data {ui user-id}          (compute-data-for-user-home-page ui))
+(defyarn home-page      {d home-page-data}    (render-data-for-user-home-page d))
 
 (defn generate-home-page [r]
   @(yank {req r} [home-page]))
@@ -122,8 +124,10 @@ It's harder to make a typo in resulting map keys. But overall, honestly, it does
 
 And now lets imagine we need an API, so we require another way to render home-data. Assume we have
 ```clojure
-(defn render-home-page-for-api [user home-page-data api-format] :...)
-(defn extract-required-api-format [params] :...)
+(defn render-home-page-for-api [user home-page-data api-format] 
+  (str api-format "|" home-page-data))
+(defn extract-required-api-format [params] 
+  (get params :api :api-v1))
 ```
 
 New code could be:
@@ -138,7 +142,6 @@ New code could be:
     {:params params
      :user-id user-id
      :user user
-     :user-session user-session
      :home-page-data home-page-data
      :home-page-for-api home-page-for-api}))
 ```
@@ -148,7 +151,7 @@ There are ways to deal with it. For example, we can refactor out a new function 
 Let's see how it looks with Knitty:
 
 ```clojure
-(defyarn api-format        {p params}                                 (extract-required-api format p))
+(defyarn api-format        {p params}                                 (extract-required-api-format p))
 (defyarn home-page-for-api {u user, d home-page-data, af api-format}  (render-home-page-for-api u d af))
 
 (defn generate-home-page-for-api [r]
@@ -158,8 +161,10 @@ Let's see how it looks with Knitty:
 Now, we realize that for rendering we also need to read the user session from another storage.
 
 ```clojure
-(defn fetch-user-session-by-id [user-id] :...)
-(defn compute-data-for-user-home-page [user session] :...) ;; now with session
+(defn fetch-user-session-by-id [user-id] 
+  {:cookie "ABC"})
+(defn compute-data-for-user-home-page [user session] 
+  {:data "Hello", :name (:name user), :c (:cookie session)})
 ```
 
 With the traditional approach, we would need to modify both `generate-home-page` and `generate-home-page-for-api`.
@@ -181,6 +186,19 @@ deferreds (note: we need to use futures from Manifold or Knitty, not native ones
 (defyarn user-session   {ui user-id}             (kt/future (fetch-user-session-by-id ui)))
 (defyarn home-page-data {u user, s user-session} (kt/future (compute-data-for-user-home-page u s)))
 ```
+
+And lets check computation flow:
+```clojure
+(require '[knitty.traceviz :as ktviz])
+
+(ktviz/view-trace
+  (binding [knitty.core/*tracing* true]
+    (generate-home-page-for-api {})))
+```
+
+Result:
+![](img/rationale_example_trace.svg)
+
 
 ## Alternatives
 
