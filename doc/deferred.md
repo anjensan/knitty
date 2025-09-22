@@ -13,7 +13,7 @@ Key differences compared to stock Manifold deferreds:
 - A single unwrap step is performed when chaining `bind*`.
 - There is no automatic coercion from blocking futures/etc to manifold deferreds.
 
-Usually Knitty deferreds are faster than Manifold, see [benchmark results](doc/bench-results.ipynb).
+Usually Knitty deferreds are faster than Manifold, see [benchmark results](bench-results.ipynb).
 
 Most of the time you do not need to construct deferreds manually — Knitty runtime does that for you — but the helpers in `knitty.deferred` are handy when integrating external asynchronous APIs or writing custom utilities.
 
