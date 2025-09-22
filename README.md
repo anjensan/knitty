@@ -2,16 +2,22 @@
 
 
 Knitty is a library for declarative definitions of how data should be computed and what dependencies exist between different pieces.
+
 Knitty assigns data computation functions to qualified keywords. Each such function explicitly declares all needed dependencies (also keywords). A user provides the initial data set as a map and requests what keys should be added — Knitty takes care of the rest: builds a dependency graph, checks for cycles, resolves deferred, memoizes all values, applies tracing and profiling.
 
+## Usage
+
+Add dependency:
+
+[![Clojars Project](https://clojars.org/com.github.anjensan/knitty/latest-version.svg)](http://clojars.org/com.github.anjensan/knitty). 
+
+Require namespace:
+
 ```clojure
-(ns user
-  (:require [knitty.core :refer [defyarn yank]]
-            [manifold.deferred :as md]))
+(require '[knitty.core :refer [defyarn yank]])
 ```
 
-
-Macro `defyarn` defines a "node of computation" (referred to as a "yarn"). Each node is identified by a qualified keyword; the body expression is evaluated and added to the global "registry" of known nodes:
+Define a few "nodes of computation" with macro `defyarn`:
 
 ```clojure
 (defyarn node-a)         ;; "input" node
@@ -23,26 +29,27 @@ Macro `defyarn` defines a "node of computation" (referred to as a "yarn"). Each 
   (+ a b))       ;; value expression
 ```
 
-
-The computation of nodes is started by running the function `yank`. When requested nodes are already in the input map, the function just returns the same map. If some nodes are missing, they are computed and values are assoc'ed to the resulting map.
-
+Compute nodes by calling the function `yank`, passing values for input nodes as map:
 
 ```clojure
-@(yank {} [])
+@(yank {} [])                              ;; nothing to compute,
 ;; => {}
 
-@(yank {node-a 1} [node-c])
+@(yank {node-a 1} [node-c])                ;; compute node-c base on node-a 
 ;; => #:user{:node-a 1, :node-b 2, :node-c 3}
 
-@(yank {node-a 10, node-b 20} [node-c])
+@(yank {node-a 10, node-b 20} [node-c])    ;; noop, as node-c is already computed
 ;; => #:user{:node-a 10, :node-b 20, :node-c 30}
 ```
 
+## Deferreds
 
 Knitty also integrates with [clj-commons/manifold](https://github.com/clj-commons/manifold):
 
 
 ```clojure
+(require '[manifold.deferred :as md])
+
 ;; node may return an async value
 (defyarn anode-x {c node-c}
   (md/future (* c 10)))
@@ -71,7 +78,11 @@ This information may be used for visualizations:
   '[knitty.tracetxt :as ktt]
   '[knitty.traceviz :as ktv])
 
-(def m @(yank {node-a 1, node-b 10} [anode-x, anode-y, anode-z]))
+(def m 
+  (binding [knitty.core/*tracing* true] ;; enable tracing
+    @(yank 
+      {node-a 1, node-b 10} 
+      [anode-x, anode-y, anode-z])))
 
 (class m)
 ;; => clojure.lang.PersistentArrayMap
@@ -88,10 +99,11 @@ This information may be used for visualizations:
 
 More examples and details can be found in the documentation:
 
-- [doc/basics.md](doc/basics.md) — getting started, core concepts.
-- [doc/advanced.md](doc/advanced.md) — multiyarns, optional dependencies, and registry tricks.
-- [doc/deferred.md](doc/deferred.md) — Knitty's deferred implementation and helpers.
-- [doc/testing.md](doc/testing.md) — fixtures, mocking yarns, and working with traces.
+- [basics](doc/basics.md) — getting started, core concepts.
+- [rationale](doc/rationale.md) — why the library was created.
+- [advanced](doc/advanced.md) — multiyarns, optional dependencies, and registry tricks.
+- [deferreds](doc/deferred.md) — Knitty's deferred implementation and helpers.
+- [testing](doc/testing.md) — fixtures, mocking yarns, and working with traces.
 
 ## License
 
